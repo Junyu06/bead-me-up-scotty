@@ -1,5 +1,6 @@
 import { BEAD_STATUSES, BEAD_TYPES, type Bead } from "./schema";
 import { beadOrigin } from "./attribution";
+import { isProjectLabel } from "./project-labels";
 
 /**
  * Shared bead filter model used by both the Board and List views. Every facet is
@@ -129,7 +130,11 @@ export const ARCHIVED_LABEL = "archived";
  */
 export function labelOptionsFrom(beads: Bead[]): { value: string; label: string }[] {
   const s = new Set<string>();
-  for (const b of beads) for (const l of b.labels ?? []) if (l !== ARCHIVED_LABEL) s.add(l);
+  for (const b of beads) {
+    for (const l of b.labels ?? []) {
+      if (l !== ARCHIVED_LABEL) s.add(l);
+    }
+  }
   return [...s].sort().map((l) => ({ value: l, label: l }));
 }
 
@@ -151,8 +156,15 @@ export function matchesFilters(b: Bead, f: Filters, humanAllowlist: string[]): b
   if (f.priority.length && !f.priority.includes(b.priority)) return false;
   if (f.origin.length && !f.origin.includes(beadOrigin(b, humanAllowlist))) return false;
   if (f.assignee.length && !f.assignee.includes(beadAssignee(b))) return false;
-  // OR within the facet, like every other facet above; AND across facets.
-  if (f.labels.length && !f.labels.some((l) => (b.labels ?? []).includes(l))) return false;
+  // Project labels and ordinary labels share the URL-backed `labels` array,
+  // but remain separate facets: selected projects must match one project label,
+  // while selected ordinary labels match one ordinary label. The two facets
+  // are ANDed so a project filter cannot be satisfied by a regular label.
+  const beadLabels = b.labels ?? [];
+  const selectedProjects = f.labels.filter(isProjectLabel);
+  const selectedLabels = f.labels.filter((label) => !isProjectLabel(label));
+  if (selectedProjects.length && !selectedProjects.some((label) => beadLabels.includes(label))) return false;
+  if (selectedLabels.length && !selectedLabels.some((label) => beadLabels.includes(label))) return false;
   const q = f.search.trim().toLowerCase();
   if (
     q &&

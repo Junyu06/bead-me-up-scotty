@@ -17,6 +17,8 @@ import { DescriptionContent, hasImageRef } from "@/components/description-conten
 import { api } from "@/lib/api-client";
 import { typeLabel } from "@/lib/beads-view";
 import { BEAD_TYPES, type BeadType } from "@/lib/schema";
+import { isProjectLabel, projectLabel, projectOptionsFrom } from "@/lib/project-labels";
+import { useUrlState } from "@/hooks/use-url-state";
 
 const inputClass =
   "h-[38px] rounded-[9px] border border-border bg-[var(--surface-2)] px-3 text-[13.5px] text-[var(--text)] outline-none focus:border-[var(--brand)]";
@@ -47,11 +49,11 @@ export function CreateBeadModal({
   type?: BeadType;
   onOpenChange: (o: boolean) => void;
 }) {
-  // ~50% wider than the old 540px default; drag the right edge to resize (persisted).
+  // Keep quick capture compact; additional fields are available on demand.
   const { width, startResize } = useResizableWidth({
-    storageKey: "bmus.width.create",
-    defaultWidth: 810,
-    min: 480,
+    storageKey: "bmus.width.quick-create",
+    defaultWidth: 560,
+    min: 360,
     max: 1200,
     deltaFactor: 2,
   });
@@ -100,8 +102,19 @@ function CreateForm({
     assignee: "",
     parent,
     labels: "",
-    backlog: false,
+    backlog: true,
   });
+
+  const { searchParams } = useUrlState();
+  const projects = React.useMemo(() => projectOptionsFrom(beads), [beads]);
+  const [selectedProject, setSelectedProject] = React.useState(() => {
+    const inherited = beads.find((b) => b.id === parent)?.labels.find(isProjectLabel);
+    const filtered = searchParams.getAll("label").filter(isProjectLabel);
+    return inherited ?? (filtered.length === 1 ? filtered[0] : "");
+  });
+  const [newProjectName, setNewProjectName] = React.useState("");
+  const selectedProjectLabel = selectedProject === "__new__"
+    ? projectLabel(newProjectName) : selectedProject;
 
   // Display text for the parent picker. Seeded from an incoming preset (e.g.
   // "Add subtask" / "Add child to this epic") so the field shows what it holds.
@@ -118,7 +131,7 @@ function CreateForm({
     ? `New ${form.parent ? "child " : ""}${typeLabel(presetType).toLowerCase()}`
     : form.parent
       ? "New child bead"
-      : "New bead";
+      : "New idea";
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
@@ -166,7 +179,7 @@ function CreateForm({
   );
 
   function submit() {
-    if (!form.title.trim() || create.isPending) return;
+    if (!form.title.trim() || !selectedProjectLabel || create.isPending) return;
     create.mutate(
       {
         title: form.title.trim(),
@@ -174,7 +187,10 @@ function CreateForm({
         priority: form.priority,
         description: form.description,
         assignee: form.assignee,
-        labels: form.labels.split(",").map((s) => s.trim()).filter(Boolean),
+        labels: [...new Set([
+          ...form.labels.split(",").map((s) => s.trim()).filter((s) => s && !isProjectLabel(s)),
+          selectedProjectLabel,
+        ])],
         parent: form.parent,
         backlog: form.backlog,
       },
@@ -226,8 +242,8 @@ function CreateForm({
           <DialogTitle className="text-[15px] font-[650]">
             {dialogTitle}
           </DialogTitle>
-          <DialogDescription className="font-mono text-[11.5px] text-[var(--text-3)]">
-            bd create … --json
+          <DialogDescription className="text-[12px] text-[var(--text-3)]">
+            Add details whenever you’re ready.
           </DialogDescription>
         </div>
         <button
@@ -239,32 +255,25 @@ function CreateForm({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-[14px] overflow-y-auto p-5">
-        <div className="grid grid-cols-2 gap-3">
+        <label className="flex flex-col gap-[6px]">
+          <span className={labelClass}>Project</span>
+          <select
+            className={selectClass}
+            value={selectedProject}
+            onChange={(e) => setSelectedProject(e.target.value)}
+          >
+            <option value="" disabled>Choose a project</option>
+            {projects.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+            <option value="__new__">New project…</option>
+          </select>
+        </label>
+        {selectedProject === "__new__" && (
           <label className="flex flex-col gap-[6px]">
-            <span className={labelClass}>Type</span>
-            <select className={selectClass} value={form.type} onChange={(e) => set("type", e.target.value as BeadType)}>
-              {BEAD_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {typeLabel(t)}
-                </option>
-              ))}
-            </select>
+            <span className={labelClass}>Project name</span>
+            <input autoFocus className={inputClass} value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)} placeholder="Project name" />
           </label>
-          <label className="flex flex-col gap-[6px]">
-            <span className={labelClass}>Priority</span>
-            <select
-              className={selectClass}
-              value={String(form.priority)}
-              onChange={(e) => set("priority", Number(e.target.value))}
-            >
-              {[0, 1, 2, 3, 4].map((p) => (
-                <option key={p} value={String(p)}>
-                  {p} · {["Critical", "High", "Medium", "Low", "Backlog"][p]}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+        )}
 
         <label className="flex flex-col gap-[6px]">
           <span className={labelClass}>Title</span>
@@ -291,140 +300,172 @@ function CreateForm({
           />
         </label>
 
-        <label className="flex flex-col gap-[6px]">
-          <span className={labelClass}>
-            Description{" "}
-            {!isDemo && (
-              <span className="font-normal text-[var(--text-3)]">· drop or paste images</span>
-            )}
-          </span>
-          <div
-            className="relative"
-            onDrop={drop.onDrop}
-            onDragOver={drop.onDragOver}
-            onDragLeave={drop.onDragLeave}
-          >
-            <textarea
-              ref={taRef}
-              className={`${inputClass} h-auto w-full resize-y py-[10px] leading-[1.5] ${
-                drop.dragOver ? "border-[var(--brand)] ring-1 ring-[var(--brand)]" : ""
-              }`}
-              rows={3}
-              value={form.description}
-              onChange={(e) => set("description", e.target.value)}
-              onPaste={drop.onPaste}
-              placeholder={
-                isDemo
-                  ? "Optional details, acceptance criteria…"
-                  : "Optional details, acceptance criteria… drag and drop screenshots and images here too!"
-              }
-            />
-            {drop.uploading && (
-              <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-[var(--surface)] px-2 py-0.5 text-[11px] text-[var(--text-3)]">
-                <Icon name="image" size={12} /> Uploading…
-              </span>
-            )}
-          </div>
-          {!isDemo && (
-            <div>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={drop.pickFiles}
-              />
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                className="inline-flex items-center gap-[6px] rounded-[8px] border border-border bg-[var(--surface-2)] px-[10px] py-[6px] text-[12px] font-medium text-[var(--text-2)] hover:bg-[var(--surface-3)]"
-              >
-                <Icon name="image" size={14} /> Attach image
-              </button>
+        <details className="group rounded-[9px] border border-border">
+          <summary className="cursor-pointer px-3 py-2 text-[12.5px] font-medium text-[var(--text-2)]">
+            More options
+          </summary>
+          <div className="flex flex-col gap-[14px] px-3 pb-3 pt-1">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-[6px]">
+                <span className={labelClass}>Type</span>
+                <select className={selectClass} value={form.type} onChange={(e) => set("type", e.target.value as BeadType)}>
+                  {BEAD_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {typeLabel(t)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-[6px]">
+                <span className={labelClass}>Priority</span>
+                <select
+                  className={selectClass}
+                  value={String(form.priority)}
+                  onChange={(e) => set("priority", Number(e.target.value))}
+                >
+                  {[0, 1, 2, 3, 4].map((p) => (
+                    <option key={p} value={String(p)}>
+                      {p} · {["Critical", "High", "Medium", "Low", "Backlog"][p]}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
-          )}
-          {hasImageRef(form.description) && (
-            <DescriptionContent
-              text={form.description}
-              projectId={projectId}
-              className="mt-1 rounded-[8px] border border-border bg-[var(--surface-2)] p-2 text-[12.5px] text-[var(--text-2)]"
-            />
-          )}
-        </label>
 
-        <div className="grid grid-cols-2 gap-3">
-          <label className="flex flex-col gap-[6px]">
-            <span className={labelClass}>Assignee</span>
-            <select className={selectClass} value={form.assignee} onChange={(e) => set("assignee", e.target.value)}>
-              <option value="">Unassigned</option>
-              {assignees.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-[6px]">
-            <span className={labelClass}>Parent</span>
-            {/* A datalist-backed input rather than a bare <select>: the option
-                list is now every open bead, which is far too long to scan. The
-                visible text is "<id> · <title> (<type>)" and the id is parsed
-                back out on change, so similar titles stay distinguishable. */}
-            <input
-              list={parentListId}
-              value={parentDraft}
-              onChange={(e) => {
-                const v = e.target.value;
-                setParentDraft(v);
-                const id = v.split(" · ")[0].trim();
-                set("parent", parentOptions.some((b) => b.id === id) ? id : "");
-              }}
-              placeholder="No parent — type to search…"
-              className={`${selectClass} cursor-text`}
-            />
-            <datalist id={parentListId}>
-              {parentOptions.map((b) => (
-                <option key={b.id} value={`${b.id} · ${b.title}`}>
-                  {typeLabel(b.issue_type)}
-                </option>
-              ))}
-            </datalist>
-          </label>
-        </div>
+            <label className="flex flex-col gap-[6px]">
+              <span className={labelClass}>
+                Description{" "}
+                {!isDemo && (
+                  <span className="font-normal text-[var(--text-3)]">· drop or paste images</span>
+                )}
+              </span>
+              <div
+                className="relative"
+                onDrop={drop.onDrop}
+                onDragOver={drop.onDragOver}
+                onDragLeave={drop.onDragLeave}
+              >
+                <textarea
+                  ref={taRef}
+                  className={`${inputClass} h-auto w-full resize-y py-[10px] leading-[1.5] ${
+                    drop.dragOver ? "border-[var(--brand)] ring-1 ring-[var(--brand)]" : ""
+                  }`}
+                  rows={3}
+                  value={form.description}
+                  onChange={(e) => set("description", e.target.value)}
+                  onPaste={drop.onPaste}
+                  placeholder={
+                    isDemo
+                      ? "Optional details, acceptance criteria…"
+                      : "Optional details, acceptance criteria… drag and drop screenshots and images here too!"
+                  }
+                />
+                {drop.uploading && (
+                  <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-[var(--surface)] px-2 py-0.5 text-[11px] text-[var(--text-3)]">
+                    <Icon name="image" size={12} /> Uploading…
+                  </span>
+                )}
+              </div>
+              {!isDemo && (
+                <div>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={drop.pickFiles}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    className="inline-flex items-center gap-[6px] rounded-[8px] border border-border bg-[var(--surface-2)] px-[10px] py-[6px] text-[12px] font-medium text-[var(--text-2)] hover:bg-[var(--surface-3)]"
+                  >
+                    <Icon name="image" size={14} /> Attach image
+                  </button>
+                </div>
+              )}
+              {hasImageRef(form.description) && (
+                <DescriptionContent
+                  text={form.description}
+                  projectId={projectId}
+                  className="mt-1 rounded-[8px] border border-border bg-[var(--surface-2)] p-2 text-[12.5px] text-[var(--text-2)]"
+                />
+              )}
+            </label>
 
-        <label className="flex flex-col gap-[6px]">
-          <span className={labelClass}>
-            Labels <span className="font-normal text-[var(--text-3)]">· comma separated</span>
-          </span>
-          <input
-            className={`${inputClass} font-mono`}
-            value={form.labels}
-            onChange={(e) => set("labels", e.target.value)}
-            placeholder="ui, dnd, m3"
-          />
-        </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-[6px]">
+                <span className={labelClass}>Assignee</span>
+                <select className={selectClass} value={form.assignee} onChange={(e) => set("assignee", e.target.value)}>
+                  <option value="">Unassigned</option>
+                  {assignees.map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-[6px]">
+                <span className={labelClass}>Parent</span>
+                {/* A datalist-backed input rather than a bare <select>: the option
+                    list is now every open bead, which is far too long to scan. The
+                    visible text is "<id> · <title> (<type>)" and the id is parsed
+                    back out on change, so similar titles stay distinguishable. */}
+                <input
+                  list={parentListId}
+                  value={parentDraft}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setParentDraft(v);
+                    const id = v.split(" · ")[0].trim();
+                    set("parent", parentOptions.some((b) => b.id === id) ? id : "");
+                  }}
+                  placeholder="No parent — type to search…"
+                  className={`${selectClass} cursor-text`}
+                />
+                <datalist id={parentListId}>
+                  {parentOptions.map((b) => (
+                    <option key={b.id} value={`${b.id} · ${b.title}`}>
+                      {typeLabel(b.issue_type)}
+                    </option>
+                  ))}
+                </datalist>
+              </label>
+            </div>
 
-        <label className="flex cursor-pointer select-none items-center gap-[9px]">
-          <input
-            type="checkbox"
-            checked={form.backlog}
-            onChange={(e) => set("backlog", e.target.checked)}
-            className="h-4 w-4 cursor-pointer"
-            style={{ accentColor: "var(--brand)" }}
-          />
-          <span className="text-[13px] text-[var(--text-2)]">
-            Start in Backlog (<span className="font-mono">deferred</span>) instead of Ready
-          </span>
-        </label>
+            <label className="flex flex-col gap-[6px]">
+              <span className={labelClass}>
+                Labels <span className="font-normal text-[var(--text-3)]">· comma separated</span>
+              </span>
+              <input
+                className={`${inputClass} font-mono`}
+                value={form.labels}
+                onChange={(e) => set("labels", e.target.value)}
+                placeholder="ui, dnd, m3"
+              />
+            </label>
+
+            <label className="flex cursor-pointer select-none items-center gap-[9px]">
+              <input
+                type="checkbox"
+                checked={form.backlog}
+                onChange={(e) => set("backlog", e.target.checked)}
+                className="h-4 w-4 cursor-pointer"
+                style={{ accentColor: "var(--brand)" }}
+              />
+              <span className="text-[13px] text-[var(--text-2)]">
+                Save to Backlog
+              </span>
+            </label>
+          </div>
+        </details>
       </div>
 
       <div className="flex shrink-0 items-center gap-[10px] border-t border-border p-[15px_20px]">
         <div className="flex flex-1 items-center gap-[7px] text-[11.5px] text-[var(--text-3)]">
-          <Icon name="user" size={13} className="text-[var(--text-2)]" />
-          <span>
-            Stamped <span className="font-mono text-[var(--text-2)]">created_by={actor}</span>
-          </span>
+          <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand)]" />
+          <span>{form.backlog ? "Backlog" : "Ready"}</span>
         </div>
         <button
           onClick={onClose}
@@ -434,12 +475,12 @@ function CreateForm({
         </button>
         <button
           onClick={submit}
-          disabled={!form.title.trim() || create.isPending}
+          disabled={!form.title.trim() || !selectedProjectLabel || create.isPending}
           className="flex h-[38px] items-center gap-[7px] rounded-[9px] px-4 text-[13px] font-semibold text-white disabled:opacity-50"
           style={{ background: "var(--brand)", boxShadow: "0 2px 8px -2px var(--brand)" }}
         >
           <Icon name="check" size={15} />
-          <span>Create bead</span>
+          <span>Save idea</span>
         </button>
       </div>
     </>

@@ -20,6 +20,7 @@ import {
   parentOf,
   checklistProgress,
 } from "@/lib/beads-view";
+import { isProjectLabel, projectDisplayName } from "@/lib/project-labels";
 
 export function BeadCard({ bead, childCount = 0 }: { bead: Bead; childCount?: number }) {
   const { index, humanAllowlist, openDetail, readOnly, selectedBeadId, selectBead } = useApp();
@@ -31,7 +32,10 @@ export function BeadCard({ bead, childCount = 0 }: { bead: Bead; childCount?: nu
   const o = beadOrigin(bead, humanAllowlist);
   const parent = parentOf(bead, index);
   const blocked = isBlocked(bead, index);
-  const visLabels = (bead.labels ?? []).filter((l) => l !== "archived").slice(0, 2);
+  const projectLabels = [...new Set((bead.labels ?? []).filter(isProjectLabel))];
+  const visLabels = (bead.labels ?? [])
+    .filter((l) => l !== "archived" && !isProjectLabel(l))
+    .slice(0, 2);
   const depCount = (bead.dependencies ?? []).filter((d) => d.type !== "parent-child").length;
   const commentCount = (bead.comments ?? []).length;
   const checklist = checklistProgress(bead.description);
@@ -92,6 +96,14 @@ export function BeadCard({ bead, childCount = 0 }: { bead: Bead; childCount?: nu
           />
           <span>{typeLabel(bead.issue_type)}</span>
         </span>
+        {projectLabels.map((label) => (
+          <span
+            key={label}
+            className="rounded-md bg-[var(--brand-weak)] px-[6px] py-px text-[10.5px] font-[550] text-[var(--brand)]"
+          >
+            {projectDisplayName(label)}
+          </span>
+        ))}
         {visLabels.map((l) => (
           <span
             key={l}

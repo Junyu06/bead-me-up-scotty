@@ -5,13 +5,13 @@ import { MultiSelectFilter, type FilterOption } from "@/components/multi-select-
 import { typeLabel, statusLabel, prioLabel } from "@/lib/beads-view";
 import { BEAD_TYPES, BEAD_STATUSES } from "@/lib/schema";
 import { type Filters, emptyFilters, toggleStr, toggleNum } from "@/lib/filters";
+import { isProjectLabel, projectDisplayName } from "@/lib/project-labels";
 
 /**
  * Search + multi-select facet filters, shared by the Board and List views so
- * both expose the same controls (status, type, priority, labels, assignee,
- * origin) + archived. Purely presentational: `labelOptions` and
- * `assigneeOptions` are the data-derived facets (the rest come from static
- * enums) and are passed in rather than read from context here.
+ * both expose the same controls (status, type, priority, project, labels,
+ * assignee, origin) + archived. Purely presentational: the data-derived
+ * options are passed in rather than read from context here.
  */
 export function FilterBar({
   filters,
@@ -31,6 +31,34 @@ export function FilterBar({
   onClearAllAction?: () => void;
 }) {
   const set = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
+
+  // Projects share the existing labels query parameter and filter state, but
+  // have their own single-select control. Keep the two label facets separate
+  // while updating either control so clearing ordinary labels cannot erase the
+  // selected project (and vice versa).
+  const selectedProjectLabels = filters.labels.filter(isProjectLabel);
+  const selectedProject = selectedProjectLabels[0] ?? "";
+  const selectedLabels = filters.labels.filter((label) => !isProjectLabel(label));
+  const ordinaryLabelOptions = labelOptions.filter((option) => !isProjectLabel(option.value));
+  const selectableProjects = React.useMemo(() => {
+    const source = labelOptions
+      .filter((option) => isProjectLabel(option.value))
+      .map((option) => ({ ...option, label: projectDisplayName(option.value) }));
+    const byValue = new Map<string, FilterOption>();
+    for (const option of source) {
+      if (isProjectLabel(option.value)) byValue.set(option.value, option);
+    }
+    // A bookmarked URL may contain a project label no longer present in the
+    // current bead-derived options. Keep it visible and human-readable until
+    // the user changes the project selection.
+    if (selectedProject && !byValue.has(selectedProject)) {
+      byValue.set(selectedProject, {
+        value: selectedProject,
+        label: projectDisplayName(selectedProject),
+      });
+    }
+    return [...byValue.values()];
+  }, [labelOptions, selectedProject]);
 
   // Count active filters (each non-empty facet + a non-empty search + archived)
   // so we can offer a one-click reset (bead 3it).
@@ -66,6 +94,33 @@ export function FilterBar({
       </div>
 
       <div className="flex items-center gap-[7px]">
+        <label
+          className="flex h-9 flex-shrink-0 items-center gap-[7px] rounded-[9px] border px-[10px] text-[12.5px]"
+          style={{
+            borderColor: selectedProject ? "var(--brand)" : "var(--border)",
+            background: selectedProject ? "var(--brand-weak)" : "var(--surface-2)",
+            color: selectedProject ? "var(--brand)" : "var(--text-2)",
+          }}
+          title="Filter by project"
+        >
+          <span className="font-medium">Project</span>
+          <select
+            aria-label="Project"
+            value={selectedProject}
+            onChange={(e) => {
+              const value = e.target.value;
+              set({ labels: [...selectedLabels, ...(value ? [value] : [])] });
+            }}
+            className="max-w-[150px] cursor-pointer border-none bg-transparent text-[12.5px] font-semibold text-[var(--text)] outline-none"
+          >
+            <option value="">All projects</option>
+            {selectableProjects.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <MultiSelectFilter
           label="Status"
           options={BEAD_STATUSES.map((s) => ({ value: s, label: statusLabel(s) }))}
@@ -87,13 +142,13 @@ export function FilterBar({
           onToggle={(v) => set({ priority: toggleNum(filters.priority, Number(v)) })}
           onClear={() => set({ priority: [] })}
         />
-        {labelOptions.length > 0 && (
+        {(ordinaryLabelOptions.length > 0 || selectedLabels.length > 0) && (
           <MultiSelectFilter
             label="Labels"
-            options={labelOptions}
-            selected={filters.labels}
-            onToggle={(v) => set({ labels: toggleStr(filters.labels, v) })}
-            onClear={() => set({ labels: [] })}
+            options={ordinaryLabelOptions}
+            selected={selectedLabels}
+            onToggle={(v) => set({ labels: [...toggleStr(selectedLabels, v), ...selectedProjectLabels] })}
+            onClear={() => set({ labels: selectedProjectLabels })}
           />
         )}
         {assigneeOptions.length > 0 && (
