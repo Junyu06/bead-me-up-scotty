@@ -285,6 +285,13 @@ export function createBdStore(repoPath: string): BeadsStore {
       });
     },
 
+    addLabel(id, label, actor) {
+      return serializeWrite(repoPath, async () => {
+        await runBdRaw(["label", "add", id, label], rw(actor));
+        return show(id);
+      });
+    },
+
     removeLabel(id, label, actor) {
       return serializeWrite(repoPath, async () => {
         await runBdRaw(["update", id, "--remove-label", label], rw(actor));

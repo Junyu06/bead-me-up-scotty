@@ -1,3 +1,21 @@
+## Personal fork
+
+This fork adds project-based quick capture and project management on top of the local Beads tracker. Business project membership stays in `project:*` labels; an app-local catalog also keeps empty project names. Removing a project category keeps its tasks.
+
+The customized branch is `local/simple-project-backlog`. `origin` points to this fork; `upstream` points to `brendan-appstart/bead-me-up-scotty`. App updates follow the checkout's configured tracking branch.
+
+To incorporate changes from the original project, start with a clean checkout of the customized branch:
+
+```sh
+git fetch upstream
+git merge upstream/main
+npm ci
+npm run build
+git push origin local/simple-project-backlog
+```
+
+Resolve any merge conflicts and verify the changed workflows before publishing the updated branch. The merge updates application code; it does not upload or synchronize the local Beads database. Do not use GitHub's discard-changes sync option on the customized branch.
+
 <div align="center">
 
 <h1>🛸 Bead Me Up, Scotty</h1>

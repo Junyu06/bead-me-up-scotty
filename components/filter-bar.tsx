@@ -5,7 +5,10 @@ import { MultiSelectFilter, type FilterOption } from "@/components/multi-select-
 import { typeLabel, statusLabel, prioLabel } from "@/lib/beads-view";
 import { BEAD_TYPES, BEAD_STATUSES } from "@/lib/schema";
 import { type Filters, emptyFilters, toggleStr, toggleNum } from "@/lib/filters";
-import { isProjectLabel, projectDisplayName } from "@/lib/project-labels";
+import { isProjectLabel, projectDisplayName, projectOptionsFrom } from "@/lib/project-labels";
+import { ProjectManager } from "@/components/project-manager";
+import { useApp } from "@/components/app-context";
+import { useProjectGroups } from "@/hooks/use-project-groups";
 
 /**
  * Search + multi-select facet filters, shared by the Board and List views so
@@ -30,6 +33,8 @@ export function FilterBar({
   onShowArchived: (v: boolean) => void;
   onClearAllAction?: () => void;
 }) {
+  const { beads, projectId, readOnly } = useApp();
+  const { data: projectGroupsData } = useProjectGroups(projectId);
   const set = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
 
   // Projects share the existing labels query parameter and filter state, but
@@ -41,12 +46,18 @@ export function FilterBar({
   const selectedLabels = filters.labels.filter((label) => !isProjectLabel(label));
   const ordinaryLabelOptions = labelOptions.filter((option) => !isProjectLabel(option.value));
   const selectableProjects = React.useMemo(() => {
-    const source = labelOptions
-      .filter((option) => isProjectLabel(option.value))
-      .map((option) => ({ ...option, label: projectDisplayName(option.value) }));
+    const groups = projectGroupsData?.groups ?? [];
+    const source = projectOptionsFrom(beads, groups);
     const byValue = new Map<string, FilterOption>();
     for (const option of source) {
       if (isProjectLabel(option.value)) byValue.set(option.value, option);
+    }
+    // Keep compatibility with callers that pass project options discovered from
+    // an independent bead snapshot (and preserve labels created by external AI).
+    for (const option of labelOptions) {
+      if (isProjectLabel(option.value) && !byValue.has(option.value)) {
+        byValue.set(option.value, { ...option, label: projectDisplayName(option.value) });
+      }
     }
     // A bookmarked URL may contain a project label no longer present in the
     // current bead-derived options. Keep it visible and human-readable until
@@ -58,7 +69,7 @@ export function FilterBar({
       });
     }
     return [...byValue.values()];
-  }, [labelOptions, selectedProject]);
+  }, [beads, labelOptions, projectGroupsData, selectedProject]);
 
   // Count active filters (each non-empty facet + a non-empty search + archived)
   // so we can offer a one-click reset (bead 3it).
@@ -121,6 +132,7 @@ export function FilterBar({
             ))}
           </select>
         </label>
+        {!readOnly && <ProjectManager groups={projectGroupsData?.groups} />}
         <MultiSelectFilter
           label="Status"
           options={BEAD_STATUSES.map((s) => ({ value: s, label: statusLabel(s) }))}

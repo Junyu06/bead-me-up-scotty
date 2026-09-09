@@ -135,6 +135,14 @@ export const demoStore: BeadsStore = {
     target.updated_at = nowIso();
     return { ...gate };
   },
+  async addLabel(id, label) {
+    const b = find(id);
+    if (!(b.labels ?? []).includes(label)) {
+      b.labels = [...(b.labels ?? []), label];
+      b.updated_at = nowIso();
+    }
+    return { ...b };
+  },
   async removeLabel(id, label) {
     const b = find(id);
     b.labels = (b.labels ?? []).filter((l) => l !== label);

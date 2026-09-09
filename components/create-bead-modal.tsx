@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Icon } from "@/components/icons";
 import { useApp } from "@/components/app-context";
 import { useCreateBead, beadsKey } from "@/hooks/use-beads";
+import { useCreateProjectGroup, useProjectGroups } from "@/hooks/use-project-groups";
 import { useImageDrop } from "@/hooks/use-image-drop";
 import { useResizableWidth } from "@/hooks/use-resizable-width";
 import { DescriptionContent, hasImageRef } from "@/components/description-content";
@@ -90,6 +91,8 @@ function CreateForm({
 }) {
   const { beads, meta, projectId } = useApp();
   const create = useCreateBead();
+  const { data: projectGroupsData } = useProjectGroups(projectId);
+  const createProject = useCreateProjectGroup(projectId);
   const qc = useQueryClient();
   const actor = meta?.humanActor ?? "you";
   const isDemo = meta?.kind === "demo";
@@ -106,7 +109,10 @@ function CreateForm({
   });
 
   const { searchParams } = useUrlState();
-  const projects = React.useMemo(() => projectOptionsFrom(beads), [beads]);
+  const projects = React.useMemo(
+    () => projectOptionsFrom(beads, projectGroupsData?.groups ?? []),
+    [beads, projectGroupsData],
+  );
   const [selectedProject, setSelectedProject] = React.useState(() => {
     const inherited = beads.find((b) => b.id === parent)?.labels.find(isProjectLabel);
     const filtered = searchParams.getAll("label").filter(isProjectLabel);
@@ -115,6 +121,9 @@ function CreateForm({
   const [newProjectName, setNewProjectName] = React.useState("");
   const selectedProjectLabel = selectedProject === "__new__"
     ? projectLabel(newProjectName) : selectedProject;
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const submitLock = React.useRef(false);
 
   // Display text for the parent picker. Seeded from an incoming preset (e.g.
   // "Add subtask" / "Add child to this epic") so the field shows what it holds.
@@ -178,10 +187,35 @@ function CreateForm({
     new Set([actor, ...(beads.map((b) => b.assignee).filter(Boolean) as string[])]),
   );
 
-  function submit() {
-    if (!form.title.trim() || !selectedProjectLabel || create.isPending) return;
-    create.mutate(
-      {
+  async function submit() {
+    if (
+      !form.title.trim() ||
+      isSubmitting ||
+      submitLock.current ||
+      create.isPending ||
+      createProject.isPending
+    ) return;
+    if (selectedProject === "__new__" && !newProjectName.trim()) {
+      setSubmitError("Enter a project name or choose No project.");
+      return;
+    }
+
+    submitLock.current = true;
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      // Register a new directory entry first. Once it exists, keep the returned
+      // label selected so a failed bead write can be retried without trying to
+      // create the same project again.
+      let projectLabelForBead = selectedProjectLabel;
+      if (selectedProject === "__new__") {
+        const { group } = await createProject.mutateAsync({ name: newProjectName.trim() });
+        projectLabelForBead = group.label;
+        setSelectedProject(group.label);
+        setNewProjectName("");
+      }
+
+      const newBead = await create.mutateAsync({
         title: form.title.trim(),
         issue_type: form.type,
         priority: form.priority,
@@ -189,30 +223,34 @@ function CreateForm({
         assignee: form.assignee,
         labels: [...new Set([
           ...form.labels.split(",").map((s) => s.trim()).filter((s) => s && !isProjectLabel(s)),
-          selectedProjectLabel,
+          ...(projectLabelForBead ? [projectLabelForBead] : []),
         ])],
         parent: form.parent,
         backlog: form.backlog,
-      },
-      {
-        onSuccess: async (newBead) => {
-          if (form.description.includes(`attachment://${draftId}/`)) {
-            try {
-              await api.attachments.finalize(projectId, draftId, newBead.id);
-              const rewritten = form.description.replaceAll(
-                `attachment://${draftId}/`,
-                `attachment://${newBead.id}/`,
-              );
-              await api.update(projectId, newBead.id, { description: rewritten });
-              qc.invalidateQueries({ queryKey: beadsKey(projectId) });
-            } catch (e) {
-              toast.error((e as Error).message);
-            }
-          }
-          onClose();
-        },
-      },
-    );
+      });
+
+      if (form.description.includes(`attachment://${draftId}/`)) {
+        try {
+          await api.attachments.finalize(projectId, draftId, newBead.id);
+          const rewritten = form.description.replaceAll(
+            `attachment://${draftId}/`,
+            `attachment://${newBead.id}/`,
+          );
+          await api.update(projectId, newBead.id, { description: rewritten });
+          qc.invalidateQueries({ queryKey: beadsKey(projectId) });
+        } catch (e) {
+          toast.error((e as Error).message);
+        }
+      }
+      onClose();
+    } catch (cause) {
+      setSubmitError(
+        cause instanceof Error && cause.message ? cause.message : "Could not save idea",
+      );
+    } finally {
+      submitLock.current = false;
+      setIsSubmitting(false);
+    }
   }
 
   // Cmd/Ctrl+Enter creates the bead from anywhere in the modal. A ref keeps the
@@ -260,9 +298,9 @@ function CreateForm({
           <select
             className={selectClass}
             value={selectedProject}
-            onChange={(e) => setSelectedProject(e.target.value)}
+            onChange={(e) => { setSelectedProject(e.target.value); setSubmitError(null); }}
           >
-            <option value="" disabled>Choose a project</option>
+            <option value="">No project</option>
             {projects.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             <option value="__new__">New project…</option>
           </select>
@@ -271,8 +309,13 @@ function CreateForm({
           <label className="flex flex-col gap-[6px]">
             <span className={labelClass}>Project name</span>
             <input autoFocus className={inputClass} value={newProjectName}
-              onChange={(e) => setNewProjectName(e.target.value)} placeholder="Project name" />
+              onChange={(e) => { setNewProjectName(e.target.value); setSubmitError(null); }} placeholder="Project name" />
           </label>
+        )}
+        {submitError && (
+          <p className="-mt-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-[12px] text-destructive">
+            {submitError}
+          </p>
         )}
 
         <label className="flex flex-col gap-[6px]">
@@ -285,6 +328,7 @@ function CreateForm({
             value={form.title}
             onChange={(e) => {
               set("title", e.target.value);
+              setSubmitError(null);
               autosize(e.currentTarget);
             }}
             placeholder="What needs doing?"
@@ -475,7 +519,13 @@ function CreateForm({
         </button>
         <button
           onClick={submit}
-          disabled={!form.title.trim() || !selectedProjectLabel || create.isPending}
+          disabled={
+            !form.title.trim() ||
+            (selectedProject === "__new__" && !selectedProjectLabel) ||
+            isSubmitting ||
+            create.isPending ||
+            createProject.isPending
+          }
           className="flex h-[38px] items-center gap-[7px] rounded-[9px] px-4 text-[13px] font-semibold text-white disabled:opacity-50"
           style={{ background: "var(--brand)", boxShadow: "0 2px 8px -2px var(--brand)" }}
         >

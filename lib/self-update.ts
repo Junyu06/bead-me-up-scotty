@@ -9,7 +9,7 @@ export type { UpdateStatus, UpdateStep, UpdateResult };
 
 /**
  * Self-update support (bead bgb). Detects when the app's own git clone is behind
- * origin/main and applies an update: git pull → npm install (if deps changed) →
+ * the branch configured as its git upstream and applies an update: git pull → npm install (if deps changed) →
  * next build → relaunch. Only meaningful when the server runs from the app's own
  * git checkout (dev / self-host) — under the global `scotty` install there's no
  * source to pull and no devDeps to build with, so everything degrades to a no-op.
@@ -56,13 +56,11 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
   if (!isAppGitRepo()) return base;
   try {
     const localSha = await git(["rev-parse", "--short=7", "HEAD"]);
-    await git(["fetch", "--quiet", "origin", "main"]); // read-only; never touches the working tree
-    // Compare against FETCH_HEAD (just written by the fetch above) rather than the
-    // refs/remotes/origin/main tracking ref: a `git fetch origin main` only
-    // guarantees FETCH_HEAD, so on single-branch / custom-refspec clones the
-    // tracking ref can be stale and `behind` would wrongly read 0.
-    const remoteSha = await git(["rev-parse", "--short=7", "FETCH_HEAD"]);
-    const behind = Number(await git(["rev-list", "--count", "HEAD..FETCH_HEAD"])) || 0;
+    // Follow this checkout's configured branch on the user's fork. Pulling
+    // origin/main unconditionally would bypass the custom branch's history.
+    await git(["fetch", "--quiet"]);
+    const remoteSha = await git(["rev-parse", "--short=7", "@{upstream}"]);
+    const behind = Number(await git(["rev-list", "--count", "HEAD..@{upstream}"])) || 0;
     return { ...base, isGitRepo: true, behind, localSha, remoteSha };
   } catch (e) {
     // Offline / no remote / detached HEAD — report but don't surface an indicator.
@@ -97,7 +95,7 @@ export async function runUpdate(): Promise<UpdateResult> {
   };
 
   const fromSha = await git(["rev-parse", "--short=7", "HEAD"]);
-  await run("git pull", "git", ["pull", "--ff-only", "origin", "main"]);
+  await run("git pull", "git", ["pull", "--ff-only"]);
   const toSha = await git(["rev-parse", "--short=7", "HEAD"]);
 
   let depsChanged = false;

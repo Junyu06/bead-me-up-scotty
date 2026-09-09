@@ -2,6 +2,7 @@ import "server-only";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import type { ProjectGroupEntry } from "./project-group-types";
 
 /**
  * Local app config (NOT stored in beads). Lives as a small JSON file under the
@@ -26,6 +27,8 @@ export interface AppConfig {
   humanAllowlist: string[];
   pollIntervalMs: number;
   projects: ProjectEntry[];
+  /** Business-project catalog, scoped to each Beads workspace (project id). */
+  projectGroups: Record<string, ProjectGroupEntry[]>;
   /**
    * Manual board ordering, kept app-local (NOT in beads): projectId → columnId →
    * ordered bead ids. Lets users drag beads within a column to set work order.
@@ -107,6 +110,7 @@ function defaults(): AppConfig {
     // drives fast updates; this interval only backstops a dropped stream.
     pollIntervalMs: 30000,
     projects: [],
+    projectGroups: {},
     orders: {},
     gamification: false,
   };
@@ -181,6 +185,39 @@ function sanitizeProjects(input: unknown): ProjectEntry[] {
   return out;
 }
 
+/**
+ * Keep the catalog tolerant of hand-edited/old config files while preserving
+ * an explicit empty list. An absent workspace key is deliberately distinct
+ * from a key whose value is `[]`; the project-group layer uses that distinction
+ * to apply defaults only on first use.
+ */
+function sanitizeProjectGroups(input: unknown): Record<string, ProjectGroupEntry[]> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const out: Record<string, ProjectGroupEntry[]> = {};
+  for (const [workspaceId, raw] of Object.entries(input as Record<string, unknown>)) {
+    if (!workspaceId || !Array.isArray(raw)) continue;
+    const entries: ProjectGroupEntry[] = [];
+    for (const item of raw) {
+      if (!item || typeof item !== "object") continue;
+      const value = item as Record<string, unknown>;
+      if (typeof value.label !== "string" || !isProjectLabelValue(value.label)) continue;
+      if (typeof value.name !== "string" || !value.name.trim()) continue;
+      entries.push({
+        label: value.label,
+        name: value.name.normalize("NFKC").trim(),
+      });
+    }
+    // Set the key even if every entry was malformed: [] is an explicit
+    // catalog and must not cause the built-in defaults to reappear.
+    out[workspaceId] = entries;
+  }
+  return out;
+}
+
+function isProjectLabelValue(label: string): boolean {
+  return label.startsWith("project:") && label.slice(8).trim().length > 0;
+}
+
 // ---- load / persist ------------------------------------------------------
 
 let cached: AppConfig | null = null;
@@ -228,6 +265,7 @@ export function getConfig(): AppConfig {
     pollIntervalMs:
       typeof onDisk?.pollIntervalMs === "number" ? onDisk.pollIntervalMs : d.pollIntervalMs,
     projects: sanitizeProjects(onDisk?.projects),
+    projectGroups: sanitizeProjectGroups(onDisk?.projectGroups),
     orders:
       onDisk?.orders && typeof onDisk.orders === "object" && !Array.isArray(onDisk.orders)
         ? (onDisk.orders as Record<string, Record<string, string[]>>)
@@ -263,6 +301,23 @@ export function saveConfig(
   const next = { ...getConfig(), ...patch };
   persist(next);
   return next;
+}
+
+/** Return the persisted catalog for one workspace, if it has been materialized. */
+export function getProjectGroups(workspaceId: string): ProjectGroupEntry[] | undefined {
+  const groups = getConfig().projectGroups[workspaceId];
+  return groups?.map((group) => ({ ...group }));
+}
+
+/** Persist one workspace's catalog without changing any other workspace. */
+export function setProjectGroups(workspaceId: string, groups: ProjectGroupEntry[]): AppConfig {
+  const cfg = getConfig();
+  cfg.projectGroups = {
+    ...cfg.projectGroups,
+    [workspaceId]: groups.map((group) => ({ ...group })),
+  };
+  persist(cfg);
+  return cfg;
 }
 
 // ---- project registry ----------------------------------------------------

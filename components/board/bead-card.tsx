@@ -5,6 +5,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { Bead } from "@/lib/schema";
 import { Icon, typeIconName } from "@/components/icons";
 import { useApp } from "@/components/app-context";
+import { useProjectGroups } from "@/hooks/use-project-groups";
 import { CopyableId } from "@/components/copyable-id";
 import { beadOrigin, originTitle } from "@/lib/attribution";
 import {
@@ -23,7 +24,8 @@ import {
 import { isProjectLabel, projectDisplayName } from "@/lib/project-labels";
 
 export function BeadCard({ bead, childCount = 0 }: { bead: Bead; childCount?: number }) {
-  const { index, humanAllowlist, openDetail, readOnly, selectedBeadId, selectBead } = useApp();
+  const { index, humanAllowlist, openDetail, projectId, readOnly, selectedBeadId, selectBead } = useApp();
+  const { data: projectGroupsData } = useProjectGroups(projectId);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: bead.id,
     disabled: readOnly,
@@ -33,6 +35,10 @@ export function BeadCard({ bead, childCount = 0 }: { bead: Bead; childCount?: nu
   const parent = parentOf(bead, index);
   const blocked = isBlocked(bead, index);
   const projectLabels = [...new Set((bead.labels ?? []).filter(isProjectLabel))];
+  const projectNames = React.useMemo(
+    () => new Map((projectGroupsData?.groups ?? []).map((group) => [group.label, group.name])),
+    [projectGroupsData],
+  );
   const visLabels = (bead.labels ?? [])
     .filter((l) => l !== "archived" && !isProjectLabel(l))
     .slice(0, 2);
@@ -101,9 +107,14 @@ export function BeadCard({ bead, childCount = 0 }: { bead: Bead; childCount?: nu
             key={label}
             className="rounded-md bg-[var(--brand-weak)] px-[6px] py-px text-[10.5px] font-[550] text-[var(--brand)]"
           >
-            {projectDisplayName(label)}
+            {projectNames.get(label) ?? projectDisplayName(label)}
           </span>
         ))}
+        {projectLabels.length === 0 && (
+          <span className="rounded-md border border-border bg-[var(--surface-2)] px-[6px] py-px text-[10.5px] font-[550] text-[var(--text-3)]">
+            No project
+          </span>
+        )}
         {visLabels.map((l) => (
           <span
             key={l}

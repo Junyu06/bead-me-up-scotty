@@ -1,4 +1,5 @@
 import type { Bead, CreateInput, UpdateInput, DepType } from "./schema";
+import type { ProjectGroup } from "./project-group-types";
 import type { UpdateStatus, UpdateResult } from "./update-types";
 
 export interface Meta {
@@ -83,6 +84,10 @@ export interface ProjectInfo {
 }
 export interface ProjectsResponse {
   projects: ProjectInfo[];
+}
+
+export interface ProjectGroupsResponse {
+  groups: ProjectGroup[];
 }
 
 export interface DoctorResponse {
@@ -318,6 +323,26 @@ export const api = {
       request<ProjectInfo>(`/api/projects/${enc(id)}`, {
         method: "PATCH",
         body: JSON.stringify({ name }),
+      }),
+  },
+
+  projectGroups: {
+    list: (projectId: string) =>
+      request<ProjectGroupsResponse>(`${base(projectId)}/project-groups`),
+    create: (projectId: string, name: string) =>
+      request<{ group: ProjectGroup }>(`${base(projectId)}/project-groups`, {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      }),
+    rename: (projectId: string, label: string, name: string) =>
+      request<{ group: ProjectGroup; updated: number }>(`${base(projectId)}/project-groups`, {
+        method: "PATCH",
+        body: JSON.stringify({ label, name }),
+      }),
+    remove: (projectId: string, label: string) =>
+      request<{ removed: string; updated: number }>(`${base(projectId)}/project-groups`, {
+        method: "DELETE",
+        body: JSON.stringify({ label }),
       }),
   },
 
