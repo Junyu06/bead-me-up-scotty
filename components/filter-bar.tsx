@@ -93,7 +93,7 @@ export function FilterBar({
 
   return (
     <>
-      <div className="flex h-9 max-w-[280px] flex-1 items-center gap-[7px] rounded-[9px] border border-border bg-[var(--surface-2)] px-[11px]">
+      <div className="flex h-9 min-w-[180px] max-w-[280px] flex-1 items-center gap-[7px] rounded-[9px] border border-border bg-[var(--surface-2)] px-[11px]">
         <Icon name="search" size={15} className="flex-shrink-0 text-[var(--text-3)]" />
         <input
           data-search
@@ -104,7 +104,7 @@ export function FilterBar({
         />
       </div>
 
-      <div className="flex items-center gap-[7px]">
+      <div className="flex min-w-0 flex-wrap items-center gap-[7px]">
         <label
           className="flex h-9 flex-shrink-0 items-center gap-[7px] rounded-[9px] border px-[10px] text-[12.5px]"
           style={{

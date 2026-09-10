@@ -98,14 +98,15 @@ const CAT_COLORS: Record<StatusCategory, string> = {
   active: "#3b82f6",
 };
 export function catColor(status: string): string {
-  return CAT_COLORS[category(status)];
+  return status === "idea" ? "#8b5cf6" : CAT_COLORS[category(status)];
 }
 
 const STATUS_LABELS: Record<string, string> = {
+  idea: "Idea · to discuss",
   open: "Open",
   in_progress: "In progress",
   blocked: "Blocked",
-  deferred: "Deferred",
+  deferred: "On hold",
   closed: "Closed",
   pinned: "Pinned",
   hooked: "Hooked",

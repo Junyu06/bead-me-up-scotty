@@ -34,7 +34,7 @@ export const demoStore: BeadsStore = {
       id,
       title: input.title.trim(),
       issue_type: input.issue_type,
-      status: input.backlog ? "deferred" : "open",
+      status: input.backlog ? "idea" : "open",
       priority: input.priority,
       assignee: input.assignee || "",
       created_by: actor,

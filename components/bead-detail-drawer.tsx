@@ -4,6 +4,7 @@ import { GateApproval } from "@/components/gate-approval";
 import { AssigneeField } from "@/components/assignee-field";
 import { DependencyEditor } from "@/components/dependency-editor";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   Sheet,
   SheetContent,
@@ -202,6 +203,7 @@ function DrawerBody({
   const removeDep = useRemoveDep();
   const archive = useArchiveBead();
   const del = useDeleteBead();
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
   const createGate = useCreateGate();
 
   const copyLink = () => {
@@ -370,6 +372,24 @@ function DrawerBody({
   return (
     <>
       <SheetDescription className="sr-only">Bead details for {bead.id}</SheetDescription>
+      <Dialog open={confirmDelete} onOpenChange={(open) => { if (!del.isPending) setConfirmDelete(open); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogTitle>Delete task?</DialogTitle>
+          <DialogDescription>
+            Delete “{bead.title}” ({bead.id}) permanently? This cannot be undone.
+          </DialogDescription>
+          <div className="flex justify-end gap-3">
+            <button className={selectClass} disabled={del.isPending} onClick={() => setConfirmDelete(false)}>Cancel</button>
+            <button
+              className={selectClass + " text-red-600"}
+              disabled={del.isPending}
+              onClick={() => del.mutate(bead.id, { onSuccess: () => { setConfirmDelete(false); onClose(); } })}
+            >
+              {del.isPending ? "Deleting…" : "Delete task"}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="sticky top-0 z-[2] flex items-center gap-[10px] border-b border-border bg-[var(--drawer)] p-[15px_20px]">
         {/* Naming the destination rather than saying "Back" — you arrive here
@@ -404,12 +424,7 @@ function DrawerBody({
           <IconBtn
             title="Delete"
             danger
-            onClick={() => {
-              if (confirm(`Delete ${bead.id}? This calls bd delete.`)) {
-                del.mutate(bead.id);
-                onClose();
-              }
-            }}
+            onClick={() => setConfirmDelete(true)}
           >
             <Icon name="trash" size={15} />
           </IconBtn>

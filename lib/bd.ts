@@ -132,6 +132,17 @@ export function createBdStore(repoPath: string): BeadsStore {
   // Collapse concurrent list() callers (the polling views) onto one in-flight export.
   let inflightList: Promise<Bead[]> | null = null;
 
+  // Register the supported BD custom status before creating or moving an idea.
+  // wip keeps it visible in bd list while excluding it from bd ready.
+  async function ensureIdeaStatus(actor: string) {
+    const config = await runBdJson<{ value: string }>(["config", "get", "status.custom"], ro);
+    const entries = (config.value || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const existing = entries.find((s) => s.split(":")[0] === "idea");
+    if (existing === "idea:wip") return;
+    if (existing) throw new BdError("The idea status must use category wip. Check bd config status.custom.");
+    await runBdRaw(["config", "set", "status.custom", [...entries, "idea:wip"].join(",")], rw(actor));
+  }
+
   async function show(id: string): Promise<Bead> {
     // bd 1.0.5 `show <id> --json` returns its envelope `data` as an ARRAY even
     // for a single id, while beadSchema expects one object. Unwrap before parse.
@@ -179,6 +190,7 @@ export function createBdStore(repoPath: string): BeadsStore {
 
     create(input: CreateInput, actor: string) {
       return serializeWrite(repoPath, async () => {
+        if (input.backlog) await ensureIdeaStatus(actor);
         const args = [
           "create",
           input.title,
@@ -194,7 +206,7 @@ export function createBdStore(repoPath: string): BeadsStore {
         const created = await runBdJson<{ id: string }>(args, rw(actor));
         const id = created.id;
         if (input.backlog) {
-          await runBdRaw(["update", id, "-s", "deferred"], rw(actor));
+          await runBdRaw(["update", id, "-s", "idea"], rw(actor));
         }
         return show(id);
       });
@@ -202,6 +214,7 @@ export function createBdStore(repoPath: string): BeadsStore {
 
     update(id, patch: UpdateInput, actor: string) {
       return serializeWrite(repoPath, async () => {
+        if (patch.status === "idea") await ensureIdeaStatus(actor);
         const args = ["update", id];
         if (patch.title !== undefined) args.push("--title", patch.title);
         if (patch.description !== undefined) args.push("--description", patch.description);
@@ -233,6 +246,7 @@ export function createBdStore(repoPath: string): BeadsStore {
 
     setStatus(id, status, actor, reason) {
       return serializeWrite(repoPath, async () => {
+        if (status === "idea") await ensureIdeaStatus(actor);
         if (status === "closed") {
           const args = ["close", id];
           // Only `bd close --reason` persists a close reason, and re-closing an

@@ -253,23 +253,6 @@ function CreateForm({
     }
   }
 
-  // Cmd/Ctrl+Enter creates the bead from anywhere in the modal. A ref keeps the
-  // listener pointed at the latest closure without re-binding on every keystroke.
-  const submitRef = React.useRef(submit);
-  React.useEffect(() => {
-    submitRef.current = submit;
-  });
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-        e.preventDefault();
-        submitRef.current();
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []);
-
   return (
     <>
       <div className="flex shrink-0 items-center gap-[10px] border-b border-border p-[17px_20px]">
@@ -332,15 +315,7 @@ function CreateForm({
               autosize(e.currentTarget);
             }}
             placeholder="What needs doing?"
-            onKeyDown={(e) => {
-              // Enter submits (titles are single-line); the box still grows as text wraps.
-              // Cmd/Ctrl+Enter is owned by the modal-wide listener — skip it here so it
-              // doesn't submit twice.
-              if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
-                e.preventDefault();
-                submit();
-              }
-            }}
+
           />
         </label>
 
@@ -499,7 +474,7 @@ function CreateForm({
                 style={{ accentColor: "var(--brand)" }}
               />
               <span className="text-[13px] text-[var(--text-2)]">
-                Save to Backlog
+                Save as an idea to discuss
               </span>
             </label>
           </div>
@@ -509,7 +484,7 @@ function CreateForm({
       <div className="flex shrink-0 items-center gap-[10px] border-t border-border p-[15px_20px]">
         <div className="flex flex-1 items-center gap-[7px] text-[11.5px] text-[var(--text-3)]">
           <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand)]" />
-          <span>{form.backlog ? "Backlog" : "Ready"}</span>
+          <span>{form.backlog ? "Idea · to discuss" : "Ready"}</span>
         </div>
         <button
           onClick={onClose}

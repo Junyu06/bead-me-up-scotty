@@ -68,8 +68,10 @@ function statusAction(v?: string): string {
       return "closed";
     case "blocked":
       return "marked Blocked";
+    case "idea":
+      return "saved for discussion";
     case "deferred":
-      return "moved to Backlog";
+      return "put on hold";
     case "open":
       return "moved to Ready";
     default:

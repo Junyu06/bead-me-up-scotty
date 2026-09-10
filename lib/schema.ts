@@ -7,6 +7,7 @@ import { z } from "zod";
  */
 
 export const BEAD_STATUSES = [
+  "idea",
   "open",
   "in_progress",
   "blocked",
@@ -157,8 +158,8 @@ export const createInputSchema = z.object({
   assignee: z.string().optional().default(""),
   labels: z.array(z.string()).optional().default([]),
   parent: z.string().optional().default(""),
-  /** When true, the bead starts in the Backlog (deferred) instead of Ready. */
-  backlog: z.boolean().optional().default(false),
+  /** Legacy field name: true starts in Ideas (idea), false in Ready (open). */
+  backlog: z.boolean().optional().default(true),
 });
 export type CreateInput = z.infer<typeof createInputSchema>;
 

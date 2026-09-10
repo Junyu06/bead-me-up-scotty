@@ -18,10 +18,11 @@ export interface BoardColumn {
 }
 
 export const BOARD_COLUMNS: BoardColumn[] = [
-  { id: "backlog", name: "Backlog", color: "#64748b", cmd: "deferred", droppable: true, status: "deferred", test: (b) => b.status === "deferred" },
+  { id: "ideas", name: "Ideas", color: "#8b5cf6", cmd: "To discuss", droppable: true, status: "idea", test: (b) => b.status === "idea" },
   { id: "ready", name: "Ready", color: "#3b82f6", cmd: "bd ready", droppable: true, status: "open", test: (b, blocked) => b.status === "open" && !blocked },
   { id: "in_progress", name: "In Progress", color: "#d97706", cmd: "in_progress", droppable: true, status: "in_progress", test: (b) => b.status === "in_progress" || b.status === "hooked" },
   { id: "blocked", name: "Blocked", color: "#ef4444", cmd: "bd blocked", droppable: false, test: (b, blocked) => blocked && b.status !== "deferred" && b.status !== "closed" },
+  { id: "deferred", name: "On hold", color: "#64748b", cmd: "Paused", droppable: true, status: "deferred", test: (b) => b.status === "deferred" },
   { id: "done", name: "Done", color: "#16a34a", cmd: "closed", droppable: true, status: "closed", test: (b) => b.status === "closed" },
 ];
 
