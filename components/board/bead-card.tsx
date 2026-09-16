@@ -74,12 +74,12 @@ export function BeadCardOverlay({ bead, childCount = 0 }: { bead: Bead; childCou
       aria-hidden="true"
       className="flex cursor-grabbing flex-col gap-[9px] rounded-[11px] border-2 border-[var(--text-3)] bg-[var(--surface)] p-[11px_12px] shadow-[var(--shadow)]"
     >
-      <BeadCardFace bead={bead} childCount={childCount} />
+      <BeadCardFace bead={bead} childCount={childCount} preview />
     </article>
   );
 }
 
-function BeadCardFace({ bead, childCount }: { bead: Bead; childCount: number }) {
+function BeadCardFace({ bead, childCount, preview = false }: { bead: Bead; childCount: number; preview?: boolean }) {
   const { index, humanAllowlist, projectId } = useApp();
   const { data: projectGroupsData } = useProjectGroups(projectId);
   const projectLabels = [...new Set((bead.labels ?? []).filter(isProjectLabel))];
@@ -103,10 +103,14 @@ function BeadCardFace({ bead, childCount }: { bead: Bead; childCount: number }) 
           style={{ background: catColor(bead.status) }}
           title={statusLabel(bead.status)}
         />
-        <CopyableId
-          id={bead.id}
-          className="font-mono text-[11.5px] tracking-[-.01em] text-[var(--text-3)]"
-        />
+        {preview ? (
+          <span className="font-mono text-[11.5px] tracking-[-.01em] text-[var(--text-3)]">{bead.id}</span>
+        ) : (
+          <CopyableId
+            id={bead.id}
+            className="font-mono text-[11.5px] tracking-[-.01em] text-[var(--text-3)]"
+          />
+        )}
         <span className="flex-1" />
         <PriorityChip p={bead.priority} />
         <OriginBadge origin={o} title={originTitle(bead.created_by, o)} />
