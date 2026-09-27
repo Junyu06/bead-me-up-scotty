@@ -18,6 +18,7 @@ struct Config {
     config_home: PathBuf,
     node: PathBuf,
     path: String,
+    project_id: Option<String>,
 }
 struct Server(Mutex<Option<Child>>);
 impl Server {
@@ -45,6 +46,22 @@ impl Drop for Server {
         self.stop();
     }
 }
+fn project_route(id: Option<&str>) -> Result<String, &'static str> {
+    match id {
+        None => Ok("/".into()),
+        Some(id)
+            if !id.is_empty()
+                && id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') =>
+        {
+            Ok(format!("/p/{id}"))
+        }
+        Some(_) => Err(
+            "project_id must be a workspace ID containing letters, numbers, hyphens or underscores",
+        ),
+    }
+}
 fn start() -> Result<(Server, String), Box<dyn std::error::Error>> {
     let home = PathBuf::from(std::env::var("HOME")?);
     let dir = home.join("Library/Application Support/Scotty");
@@ -55,6 +72,7 @@ fn start() -> Result<(Server, String), Box<dyn std::error::Error>> {
     if !cfg.board.join(".beads").is_dir() {
         return Err("Configured BD board is missing".into());
     }
+    let route = project_route(cfg.project_id.as_deref())?;
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let port = listener.local_addr()?.port();
     drop(listener);
@@ -67,7 +85,6 @@ fn start() -> Result<(Server, String), Box<dyn std::error::Error>> {
         .current_dir(&cfg.repo)
         .env("BEADS_REPO", cfg.board)
         .env("XDG_CONFIG_HOME", cfg.config_home)
-        .env("BEADS_ACTOR", "terry")
         .env("NEXT_TELEMETRY_DISABLED", "1")
         .env("HOST", "127.0.0.1")
         .env("PORT", port.to_string())
@@ -88,14 +105,13 @@ fn start() -> Result<(Server, String), Box<dyn std::error::Error>> {
             Duration::from_millis(300),
         ) {
             s.set_read_timeout(Some(Duration::from_secs(1)))?;
-            let _=s.write_all(b"GET /api/p/board/project-groups HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+            let _ = s.write_all(
+                b"GET /api/projects HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+            );
             let mut response = [0u8; 128];
             if let Ok(n) = s.read(&mut response) {
                 if String::from_utf8_lossy(&response[..n]).starts_with("HTTP/1.1 200") {
-                    return Ok((
-                        server,
-                        format!("http://127.0.0.1:{port}/p/board?view=board"),
-                    ));
+                    return Ok((server, format!("http://127.0.0.1:{port}{route}")));
                 }
             }
         }
@@ -110,7 +126,7 @@ fn main() {
    let _=Command::new("/usr/bin/osascript").args(["-e", "on run argv\ndisplay alert \"Scotty\" message (item 1 of argv) as critical\nend run", &message]).status();
    return Err(error);
   }}; app.manage(server);
-  let allowed = url.split("/p/").next().unwrap().to_owned();
+  let allowed = url.parse::<tauri::Url>()?.origin().ascii_serialization();
   tauri::WebviewWindowBuilder::new(app,"main",tauri::WebviewUrl::External(url.parse()?))
    .title("Scotty").inner_size(1280.0,840.0).min_inner_size(800.0,560.0)
    .on_navigation(move |url| url.as_str().starts_with(&(allowed.clone()+"/")))
@@ -119,4 +135,25 @@ fn main() {
  }).on_window_event(|window,event| { if matches!(event,tauri::WindowEvent::Destroyed) {window.app_handle().exit(0);} })
  .build(tauri::generate_context!()).expect("Unable to start Scotty: check ~/Library/Application Support/Scotty/server.log")
  .run(|app,event| {if matches!(event,tauri::RunEvent::Exit) {if let Some(server)=app.try_state::<Server>() {server.stop();}}});
+}
+
+#[cfg(test)]
+mod tests {
+    use super::project_route;
+    #[test]
+    fn workspace_routes_are_optional_and_local() {
+        assert_eq!(project_route(None).unwrap(), "/");
+        assert_eq!(
+            project_route(Some("sample-workspace_2")).unwrap(),
+            "/p/sample-workspace_2"
+        );
+        for invalid in [
+            "",
+            "../settings",
+            "example?view=board",
+            "https://example.com",
+        ] {
+            assert!(project_route(Some(invalid)).is_err());
+        }
+    }
 }

@@ -48,7 +48,7 @@ export function UpdateIndicator() {
         <DialogContent className="max-w-[460px]">
           <DialogTitle>Update available</DialogTitle>
           <DialogDescription>
-            Your build is {data.behind} {plural} behind <span className="font-mono">main</span>.
+            Your build is {data.behind} {plural} behind its tracked branch.
           </DialogDescription>
 
           <div className="mt-1 flex items-center gap-2 rounded-[9px] border border-border bg-[var(--surface-2)] p-[10px_12px] font-mono text-[12px]">

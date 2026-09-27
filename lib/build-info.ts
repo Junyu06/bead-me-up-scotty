@@ -5,7 +5,7 @@
  */
 
 /** owner/repo slug for this project's GitHub. */
-export const GITHUB_REPO = "Junyu06/bead-me-up-scotty";
+export const GITHUB_REPO = process.env.NEXT_PUBLIC_GITHUB_REPO || "";
 
 /** Sequential build number = `git rev-list --count HEAD` at build time. */
 export const BUILD_NUMBER = process.env.NEXT_PUBLIC_BUILD_NUMBER || "";
@@ -14,6 +14,7 @@ export const BUILD_NUMBER = process.env.NEXT_PUBLIC_BUILD_NUMBER || "";
 export const BUILD_SHA = process.env.NEXT_PUBLIC_BUILD_SHA || "";
 
 /** Link to a commit's comments section on GitHub. */
-export function commitUrl(sha: string): string {
+export function commitUrl(sha: string): string | undefined {
+  if (!GITHUB_REPO || !/^[a-f0-9]{7,40}$/i.test(sha)) return undefined;
   return `https://github.com/${GITHUB_REPO}/commit/${sha}#commitcomments`;
 }

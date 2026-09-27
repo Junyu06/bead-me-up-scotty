@@ -62,3 +62,6 @@ next-env.d.ts
 # Claude Code git worktrees — transient working copies of the repo, never source.
 # (Other .claude/ files like commands/ and settings.json stay tracked.)
 .claude/worktrees/
+
+# Local desktop configuration may contain user paths.
+desktop.json

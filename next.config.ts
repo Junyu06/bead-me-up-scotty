@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { execSync } from "node:child_process";
+import { githubRepo } from "./lib/github-repo";
 
 // Build metadata baked in at build time (bead wxu). BUILD_NUMBER = git commit
 // count; BUILD_SHA = 7-char short hash. CI can override via env vars of the same
@@ -15,6 +16,7 @@ const BUILD_NUMBER = process.env.BUILD_NUMBER || git("git rev-list --count HEAD"
 const BUILD_SHA = process.env.BUILD_SHA || git("git rev-parse --short=7 HEAD");
 
 const nextConfig: NextConfig = {
+  turbopack: { root: process.cwd() },
   // Standalone output is opt-in (set in the Dockerfile builder stage): the
   // local launchers (npm start, scripts/serve.mjs, bin/bead-me-up-scotty.mjs)
   // all run `next start`, which does not support standalone output, and
@@ -25,6 +27,7 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_BUILD_NUMBER: BUILD_NUMBER,
     NEXT_PUBLIC_BUILD_SHA: BUILD_SHA,
+    NEXT_PUBLIC_GITHUB_REPO: githubRepo(git("git remote get-url origin")),
   },
   // Eleventy is a CLI/Node tool we shell out to at runtime — never bundle it.
   serverExternalPackages: ["@11ty/eleventy"],

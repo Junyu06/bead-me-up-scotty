@@ -15,7 +15,7 @@ contents = app / "Contents"
 (contents / "Resources").mkdir(parents=True, exist_ok=True)
 shutil.copy2(root / "target/release/scotty-desktop", contents / "MacOS/scotty-desktop")
 with (contents / "Info.plist").open("wb") as f:
-    plistlib.dump({"CFBundleExecutable": "scotty-desktop", "CFBundleIdentifier": "com.junyu.scotty", "CFBundleName": "Scotty", "CFBundleDisplayName": "Scotty", "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.1.0", "CFBundleVersion": "1", "LSMinimumSystemVersion": "10.15", "NSHighResolutionCapable": True}, f)
+    plistlib.dump({"CFBundleExecutable": "scotty-desktop", "CFBundleIdentifier": "com.beadmeupscotty.desktop", "CFBundleName": "Scotty", "CFBundleDisplayName": "Scotty", "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.1.0", "CFBundleVersion": "1", "LSMinimumSystemVersion": "10.15", "NSHighResolutionCapable": True}, f)
 for attribute in ("com.apple.FinderInfo", "com.apple.ResourceFork"):
     subprocess.run(["xattr", "-r", "-d", attribute, str(app)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(app)], check=True)

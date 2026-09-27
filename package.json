@@ -12,7 +12,8 @@
     "bin",
     ".next",
     "public",
-    "next.config.ts"
+    "next.config.ts",
+    "lib/github-repo.ts"
   ],
   "engines": {
     "node": ">=20"

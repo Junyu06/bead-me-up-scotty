@@ -1,1 +1,1 @@
-{"productName":"Scotty","version":"0.1.0","identifier":"com.junyu.scotty","build":{"frontendDist":"ui"},"app":{"windows":[],"security":{"csp":"default-src 'self'; style-src 'self' 'unsafe-inline'"}},"bundle":{"active":false}}
+{"productName":"Scotty","version":"0.1.0","identifier":"com.beadmeupscotty.desktop","build":{"frontendDist":"ui"},"app":{"windows":[],"security":{"csp":"default-src 'self'; style-src 'self' 'unsafe-inline'"}},"bundle":{"active":false}}

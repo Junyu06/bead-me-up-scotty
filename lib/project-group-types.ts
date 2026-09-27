@@ -10,7 +10,4 @@ export interface ProjectGroupEntry {
   name: string;
 }
 
-export const DEFAULT_PROJECT_GROUPS: ProjectGroupEntry[] = [
-  { label: "project:safeclick", name: "SafeClick" },
-  { label: "project:detentlabs", name: "DetentLabs" },
-];
+export const DEFAULT_PROJECT_GROUPS: ProjectGroupEntry[] = [];

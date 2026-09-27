@@ -33,3 +33,7 @@ coverage/
 build/
 out/
 .vercel
+
+# Independent desktop/preview packages are not part of the Next.js image.
+desktop/
+pm-client/
