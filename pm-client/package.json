@@ -8,6 +8,7 @@
     "dev": "vite --host 127.0.0.1 --port 1420 --strictPort",
     "build": "tsc --noEmit && vite build",
     "test": "node tests/run.mjs",
+    "test:ui": "node tests/header.mjs",
     "desktop": "tauri dev",
     "desktop:build": "tauri build --bundles app",
     "format": "prettier --write src tests docs",

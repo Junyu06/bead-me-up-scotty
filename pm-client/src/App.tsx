@@ -3,6 +3,8 @@ import {
   ArrowLeft,
   ArrowUpRight,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Columns3,
   FolderOpen,
   Layers2,
@@ -31,6 +33,7 @@ import { NeedMe } from "./NeedMe";
 import { Timeline } from "./Timeline";
 import { Detail, NewIdea } from "./Detail";
 import { historyScope, projectScope } from "./navigation";
+import { useCompactHeader } from "./useCompactHeader";
 
 type View = "projects" | "overview" | "board" | "map" | "need" | "timeline";
 function restore(): { view: View; filters: Filters; projectSearch?: string } {
@@ -73,6 +76,14 @@ export default function App() {
   const [newIdea, setNewIdea] = useState(false);
   const [extraFilters, setExtraFilters] = useState(false);
   const [notice, setNotice] = useState("");
+  const {
+    container: headerRef,
+    compact: headerCompact,
+    toggle: toggleHeader,
+    onWheelCapture,
+    onScrollCapture,
+    onKeyDownCapture,
+  } = useCompactHeader(`${view}:${filters.project}`, view !== "projects");
   const index = useMemo(() => makeIndex(snapshot.items), [snapshot.items]);
   const projects = snapshot.items.filter((i) => i.role === "project");
   const project = index.byId.get(filters.project);
@@ -204,7 +215,10 @@ export default function App() {
           ))}
         </div>
       </aside>
-      <main className="main">
+      <main
+        ref={headerRef}
+        className={`main ${headerCompact ? "header-compact" : ""}`}
+      >
         <header className="toolbar">
           <div className="breadcrumb">
             <button
@@ -227,6 +241,30 @@ export default function App() {
             <strong>{viewLabel}</strong>
           </div>
           <div className="toolbar-actions">
+            {view !== "projects" && (
+              <button
+                className="header-toggle"
+                aria-expanded={!headerCompact}
+                aria-controls={
+                  view === "need"
+                    ? "workspace-filters"
+                    : "workspace-filters workspace-title"
+                }
+                aria-label={headerCompact ? "展开标题与筛选" : "收起标题与筛选"}
+                title={headerCompact ? "展开标题与筛选" : "收起标题与筛选"}
+                onClick={toggleHeader}
+              >
+                {headerCompact ? (
+                  <ChevronDown size={15} />
+                ) : (
+                  <ChevronUp size={15} />
+                )}
+                {headerCompact ? "展开" : "收起"}
+                {headerCompact && (activeCount > 0 || filters.search) && (
+                  <span>筛选 {activeCount + Number(!!filters.search)}</span>
+                )}
+              </button>
+            )}
             <span className="demo-badge">示例工作区 · 修改仅保留本次会话</span>
             <button
               className="icon-button"
@@ -239,29 +277,38 @@ export default function App() {
         </header>
         {view !== "projects" && view !== "need" && (
           <div className="view-heading">
-            <div>
-              {project ? (
-                <button
-                  className="back-projects"
-                  aria-label="返回全部项目"
-                  onClick={() => {
-                    setScope("all");
-                    setView("projects");
-                  }}
-                >
-                  <ArrowLeft size={17} />
-                </button>
-              ) : null}
-              <h1>{project?.title ?? "全部工作"}</h1>
-              {project && (
-                <button
-                  className="icon-button"
-                  aria-label="查看项目详情"
-                  onClick={() => setSelected(project.id)}
-                >
-                  <ArrowUpRight size={17} />
-                </button>
-              )}
+            <div
+              className="header-collapse"
+              id="workspace-title"
+              data-header-details
+              inert={headerCompact}
+            >
+              <div className="header-collapse-inner">
+                <div className="view-title">
+                  {project ? (
+                    <button
+                      className="back-projects"
+                      aria-label="返回全部项目"
+                      onClick={() => {
+                        setScope("all");
+                        setView("projects");
+                      }}
+                    >
+                      <ArrowLeft size={17} />
+                    </button>
+                  ) : null}
+                  <h1>{project?.title ?? "全部工作"}</h1>
+                  {project && (
+                    <button
+                      className="icon-button"
+                      aria-label="查看项目详情"
+                      onClick={() => setSelected(project.id)}
+                    >
+                      <ArrowUpRight size={17} />
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="view-tabs" aria-label="项目视图">
               {(project
@@ -287,158 +334,175 @@ export default function App() {
           </div>
         )}
         <div
-          className={`filter-toolbar ${view === "projects" ? "projects-filter" : ""}`}
+          className="header-collapse"
+          id="workspace-filters"
+          data-header-details
+          inert={headerCompact}
         >
-          <label className="search-box">
-            <Search size={15} />
-            <input
-              aria-label="搜索标题或 ID"
-              placeholder="搜索标题或 ID"
-              value={view === "projects" ? projectSearch : filters.search}
-              onChange={(e) =>
-                view === "projects"
-                  ? setProjectSearch(e.target.value)
-                  : setFilters({ ...filters, search: e.target.value })
-              }
-            />
-            {(view === "projects" ? projectSearch : filters.search) && (
-              <button
-                aria-label="清空搜索"
-                className="icon-button"
-                onClick={() =>
-                  view === "projects"
-                    ? setProjectSearch("")
-                    : setFilters({ ...filters, search: "" })
-                }
-              >
-                <X size={12} />
-              </button>
-            )}
-          </label>
-          {view !== "projects" && (
-            <>
-              <select
-                aria-label="项目范围"
-                value={filters.project}
-                onChange={(e) => {
-                  const id = e.target.value;
-                  setScope(id);
-                  if (
-                    id === "all" &&
-                    ["map", "timeline", "overview"].includes(view)
-                  )
-                    setView("board");
-                }}
-              >
-                <option value="all">全部项目</option>
-                {projects.map((p) => (
-                  <option value={p.id} key={p.id}>
-                    {p.title}
-                  </option>
-                ))}
-              </select>
-              <button
-                className={`filter-button ${activeCount ? "filtered" : ""}`}
-                onClick={() => setExtraFilters(!extraFilters)}
-              >
-                <Settings2 size={14} />
-                筛选{activeCount > 0 && <span>{activeCount}</span>}
-              </button>
-              {(filters.search || activeCount > 0) && (
-                <button
-                  className="text-button"
-                  onClick={() =>
-                    setFilters({ ...emptyFilters, project: filters.project })
+          <div className="header-collapse-inner">
+            <div
+              className={`filter-toolbar ${view === "projects" ? "projects-filter" : ""}`}
+            >
+              <label className="search-box">
+                <Search size={15} />
+                <input
+                  aria-label="搜索标题或 ID"
+                  placeholder="搜索标题或 ID"
+                  value={view === "projects" ? projectSearch : filters.search}
+                  onChange={(e) =>
+                    view === "projects"
+                      ? setProjectSearch(e.target.value)
+                      : setFilters({ ...filters, search: e.target.value })
                   }
-                >
-                  清除筛选
-                </button>
-              )}
-            </>
-          )}
-          <span className="filter-spacer" />
-          <span className="snapshot-date">9 月 25 日，星期五</span>
-        </div>
-        {extraFilters && view !== "projects" && (
-          <div className="extra-filters">
-            <label>
-              Milestone
-              <select
-                aria-label="Milestone 筛选"
-                value={filters.milestone}
-                onChange={(e) =>
-                  setFilters({ ...filters, milestone: e.target.value })
-                }
-              >
-                <option value="all">全部</option>
-                {snapshot.items
-                  .filter(
-                    (i) =>
-                      i.role === "milestone" &&
-                      (filters.project === "all" ||
-                        i.parent === filters.project),
-                  )
-                  .map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.title}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label>
-              负责人
-              <select
-                aria-label="负责人筛选"
-                value={filters.owner}
-                onChange={(e) =>
-                  setFilters({ ...filters, owner: e.target.value })
-                }
-              >
-                <option value="all">全部</option>
-                {assignees(snapshot.items).map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              优先级
-              <select
-                aria-label="优先级筛选"
-                value={filters.priority}
-                onChange={(e) =>
-                  setFilters({ ...filters, priority: e.target.value })
-                }
-              >
-                <option value="all">全部</option>
-                {[0, 1, 2, 3, 4].map((p) => (
-                  <option key={p} value={p}>
-                    P{p}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              标签
-              <select
-                aria-label="标签筛选"
-                value={filters.label}
-                onChange={(e) =>
-                  setFilters({ ...filters, label: e.target.value })
-                }
-              >
-                <option value="all">全部</option>
-                {[...new Set(snapshot.items.flatMap((i) => i.labels))].map(
-                  (l) => (
-                    <option key={l}>{l}</option>
-                  ),
+                />
+                {(view === "projects" ? projectSearch : filters.search) && (
+                  <button
+                    aria-label="清空搜索"
+                    className="icon-button"
+                    onClick={() =>
+                      view === "projects"
+                        ? setProjectSearch("")
+                        : setFilters({ ...filters, search: "" })
+                    }
+                  >
+                    <X size={12} />
+                  </button>
                 )}
-              </select>
-            </label>
+              </label>
+              {view !== "projects" && (
+                <>
+                  <select
+                    aria-label="项目范围"
+                    value={filters.project}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setScope(id);
+                      if (
+                        id === "all" &&
+                        ["map", "timeline", "overview"].includes(view)
+                      )
+                        setView("board");
+                    }}
+                  >
+                    <option value="all">全部项目</option>
+                    {projects.map((p) => (
+                      <option value={p.id} key={p.id}>
+                        {p.title}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className={`filter-button ${activeCount ? "filtered" : ""}`}
+                    onClick={() => setExtraFilters(!extraFilters)}
+                  >
+                    <Settings2 size={14} />
+                    筛选{activeCount > 0 && <span>{activeCount}</span>}
+                  </button>
+                  {(filters.search || activeCount > 0) && (
+                    <button
+                      className="text-button"
+                      onClick={() =>
+                        setFilters({
+                          ...emptyFilters,
+                          project: filters.project,
+                        })
+                      }
+                    >
+                      清除筛选
+                    </button>
+                  )}
+                </>
+              )}
+              <span className="filter-spacer" />
+              <span className="snapshot-date">9 月 25 日，星期五</span>
+            </div>
+            {extraFilters && view !== "projects" && (
+              <div className="extra-filters">
+                <label>
+                  Milestone
+                  <select
+                    aria-label="Milestone 筛选"
+                    value={filters.milestone}
+                    onChange={(e) =>
+                      setFilters({ ...filters, milestone: e.target.value })
+                    }
+                  >
+                    <option value="all">全部</option>
+                    {snapshot.items
+                      .filter(
+                        (i) =>
+                          i.role === "milestone" &&
+                          (filters.project === "all" ||
+                            i.parent === filters.project),
+                      )
+                      .map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.title}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  负责人
+                  <select
+                    aria-label="负责人筛选"
+                    value={filters.owner}
+                    onChange={(e) =>
+                      setFilters({ ...filters, owner: e.target.value })
+                    }
+                  >
+                    <option value="all">全部</option>
+                    {assignees(snapshot.items).map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  优先级
+                  <select
+                    aria-label="优先级筛选"
+                    value={filters.priority}
+                    onChange={(e) =>
+                      setFilters({ ...filters, priority: e.target.value })
+                    }
+                  >
+                    <option value="all">全部</option>
+                    {[0, 1, 2, 3, 4].map((p) => (
+                      <option key={p} value={p}>
+                        P{p}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  标签
+                  <select
+                    aria-label="标签筛选"
+                    value={filters.label}
+                    onChange={(e) =>
+                      setFilters({ ...filters, label: e.target.value })
+                    }
+                  >
+                    <option value="all">全部</option>
+                    {[...new Set(snapshot.items.flatMap((i) => i.labels))].map(
+                      (l) => (
+                        <option key={l}>{l}</option>
+                      ),
+                    )}
+                  </select>
+                </label>
+              </div>
+            )}
           </div>
-        )}
-        <div className={`view-content view-${view}`}>
+        </div>
+        <div
+          className={`view-content view-${view}`}
+          onWheelCapture={onWheelCapture}
+          onScrollCapture={onScrollCapture}
+          onKeyDownCapture={onKeyDownCapture}
+        >
           {view === "projects" ? (
             <Projects
               snapshot={snapshot}

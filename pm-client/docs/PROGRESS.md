@@ -1,6 +1,14 @@
 # UI-01 delivery status
 
-Updated 2026-09-27. The interactive preview includes completion-filter, legibility, priority workflow fixes and ticket terminology. UI-02 has not started. Current verification and remaining limitations are separated below.
+Updated 2026-09-27. The interactive preview includes completion-filter, legibility, workflow fixes, ticket terminology and a collapsible workspace header. UI-02 has not started. Current verification and remaining limitations are separated below.
+
+## Latest verification: workspace header
+
+- Project Overview, Board, Map and Timeline default to expanded headers. Vertical scroll intent collapses the title and filters with a short transition; upward intent or the persistent toggle restores them. Need Me shares the filter behavior. Switching views or projects resets to expanded.
+- Project tabs and Board column names remain visible. Active filter counts remain in the compact toolbar. Hidden controls are inert; focused inputs remain visible and focus moves from a collapsing button to the persistent toggle. Reduced-motion preferences disable the transitions.
+- At a 1280 × 720 viewport with extra filters visible, Board's scroll area increases from 377 to 570 pixels in Chromium, and from 393 to 570 pixels in WebKit. Browser assertions cover both scroll directions, horizontal scroll exclusion, preserved filter values, focus/Tab traversal, keyboard scrolling, view/project resets, obsolete saved-owner fallback, and Map pan/pinch behavior. Both browser engines passed the full interaction script; Map controls/footer also fit the native minimum of 1000 × 650 with expanded filters.
+- 25/25 domain tests, PM lint, format and production build passed. The arm64 debug app was rebuilt with an actual bundled icon. A new-directory install/build check was also completed independently. The desktop app remains a development build; signing/notarization and real BD integration are not covered.
+- Scotty's selected upstream fixes passed its production build and browser checks for theme persistence, drag feedback (including unresolved prerequisites), sorting/read-only guards, default views and Epic navigation. Production npm dependency audit reported no advisories at the time of this check. Root lint has one existing notification-navigation warning under the updated Next rules; the build also reports dynamic file-tracing warnings. These are separate from the PM checks.
 
 ## Delivered behavior
 

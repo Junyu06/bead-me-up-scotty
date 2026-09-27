@@ -578,10 +578,11 @@ nav button.selected {
   line-height: 1.8;
 }
 .view-heading {
-  padding: 28px 30px 0;
+  padding: 0 30px;
   flex-shrink: 0;
 }
-.view-heading > div:first-child {
+.view-title {
+  padding: 22px 0 14px;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -599,11 +600,11 @@ nav button.selected {
 .view-tabs {
   display: flex;
   gap: 25px;
-  margin-top: 21px;
+  margin-top: 0;
   border-bottom: 1px solid var(--line);
 }
 .view-tabs button {
-  padding: 0 0 13px;
+  padding: 13px 0;
   color: var(--muted);
   font-size: 12px;
   border-bottom: 2px solid transparent;
@@ -844,12 +845,17 @@ nav button.selected {
   align-self: stretch;
 }
 .column-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f3f4f0;
+  box-shadow: 0 -12px 0 #f3f4f0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 17px;
+  margin-bottom: 5px;
   padding: 0 3px;
-  height: 20px;
+  height: 32px;
 }
 .column-heading > span:last-child {
   font-size: 12px;
@@ -1050,7 +1056,7 @@ nav button.selected {
   display: flex;
   flex-direction: column;
   background: #fafbf8;
-  min-height: 440px;
+  min-height: 0;
 }
 .map-toolbar {
   display: flex;
@@ -1890,5 +1896,77 @@ nav button.selected {
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* The project tabs remain outside the two collapsible sections. */
+.header-collapse {
+  display: grid;
+  grid-template-rows: 1fr;
+  flex-shrink: 0;
+  opacity: 1;
+  transition:
+    grid-template-rows 220ms ease,
+    opacity 160ms ease;
+}
+.header-collapse-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+.header-compact .header-collapse {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows 220ms ease,
+    opacity 160ms ease,
+    visibility 0s 220ms;
+}
+.toolbar {
+  transition: height 220ms ease;
+}
+.header-compact .toolbar {
+  height: 48px;
+}
+.header-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--secondary);
+}
+.header-toggle:hover {
+  background: #eeefea;
+}
+.header-toggle span {
+  color: var(--text);
+  border-left: 1px solid var(--line);
+  padding-left: 8px;
+}
+.breadcrumb {
+  min-width: 0;
+}
+.breadcrumb button {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.breadcrumb > svg,
+.breadcrumb > strong,
+.toolbar-actions {
+  flex-shrink: 0;
+}
+.view-board,
+.view-map {
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  .header-collapse,
+  .header-compact .header-collapse,
+  .toolbar {
+    transition: none;
   }
 }

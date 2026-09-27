@@ -53,3 +53,17 @@ npm --prefix pm-client run lint
 真实 Beads 读写、原生 readiness、持久保存和真实关闭/重开尚未接入。示例中的可执行状态计算不能直接用于真实 BD。剩余界面问题和验证范围见 [PROGRESS.md](docs/PROGRESS.md)。
 
 其他资料：[设计](docs/DESIGN.md)、[BD 接入边界](docs/BD_CONTRACT.md)、[本地环境核验](docs/LOCAL_FACTS.md)、[产品计划](docs/PLAN.md)。源码及复用资源遵循仓库的 [MIT 许可证](../LICENSE)。
+
+## 顶部收起
+
+项目概览、Board、Map、Timeline 默认展开标题和筛选区。向下滚动时收起，向上滚动或点击“展开”恢复。项目标签始终可见；有生效中的筛选时，展开按钮旁显示筛选数量。Need Me 使用同样的筛选收起方式。Board 各列名称在滚动时保持可见。
+
+横向滚动和 Map 双指缩放不会触发收起。搜索框、选择框保持焦点时会继续显示；支持键盘操作及系统减少动态效果设置。
+
+启动 `npm run dev` 后，在另一个终端的 `pm-client/` 目录检查交互：
+
+```sh
+PM_TEST_URL=http://127.0.0.1:1420 npm run test:ui
+```
+
+浏览器测试使用根目录依赖中的 Playwright。首次使用时，在仓库根目录执行 `npx playwright install chromium` 安装测试浏览器。已安装 WebKit 时，可加 `PM_BROWSER=webkit` 检查该引擎。

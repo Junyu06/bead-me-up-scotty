@@ -53,3 +53,17 @@ Creation, editing and acceptance change the in-memory example only. Reloading re
 Real Beads reads/writes, native readiness, durable saves and real close/reopen operations are not connected. The preview's simulated readiness is not a production BD implementation. See [PROGRESS.md](docs/PROGRESS.md) for remaining UI issues and verification limits.
 
 See [DESIGN.md](docs/DESIGN.md), [BD_CONTRACT.md](docs/BD_CONTRACT.md), [LOCAL_FACTS.md](docs/LOCAL_FACTS.md), and [PLAN.md](docs/PLAN.md). Source and reused assets remain under the repository's [MIT license](../LICENSE).
+
+## Collapsible workspace header
+
+Project Overview, Board, Map and Timeline open with their title and filters expanded. Scroll down to collapse them; scroll up or select **展开** to restore them. The project tabs remain visible, and active filters are indicated beside the expand button. Need Me shares the compact filter behavior. Board column names stay visible while scrolling.
+
+Horizontal scrolling and Map pinch zoom do not toggle the header. Search and select controls stay visible while focused. Keyboard controls and reduced-motion settings are supported.
+
+With `npm run dev` running, verify the interaction in another terminal from `pm-client/`:
+
+```sh
+PM_TEST_URL=http://127.0.0.1:1420 npm run test:ui
+```
+
+The browser test uses Playwright from the root dependencies. Install its Chromium browser once with `npx playwright install chromium` from the repository root. Set `PM_BROWSER=webkit` to exercise WebKit when that Playwright browser is installed.
