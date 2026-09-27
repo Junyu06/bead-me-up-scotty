@@ -11,6 +11,7 @@ import { makeIndex } from "@/lib/beads-view";
 import { AppProvider, type DetailAction } from "@/components/app-context";
 import { Sidebar } from "@/components/sidebar";
 import { Board } from "@/components/board/board";
+import { OverviewView } from "@/components/overview-view";
 import { FocusView } from "@/components/focus-view";
 import { ListView } from "@/components/list-view";
 import { EpicsView } from "@/components/epics-view";
@@ -227,6 +228,7 @@ export function AppShell({ projectId }: { projectId: string }) {
             </div>
           ) : (
             <>
+              {view === "overview" && <OverviewView />}
               {view === "board" && <Board />}
               {view === "list" && <ListView />}
               {view === "epics" && (

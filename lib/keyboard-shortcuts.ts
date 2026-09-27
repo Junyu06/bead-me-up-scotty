@@ -12,6 +12,7 @@ export interface KeyboardShortcutGroup {
 }
 
 export const VIEW_KEY_BINDINGS: Record<string, View> = {
+  o: "overview",
   f: "focus",
   b: "board",
   l: "list",
@@ -55,6 +56,7 @@ export const KEYBOARD_SHORTCUT_GROUPS: KeyboardShortcutGroup[] = [
   {
     topic: "Views",
     shortcuts: [
+      { keys: ["G", "O"], label: "Overview", sequence: true },
       { keys: ["G", "F"], label: "Focus", sequence: true },
       { keys: ["G", "B"], label: "Board", sequence: true },
       { keys: ["G", "L"], label: "List", sequence: true },

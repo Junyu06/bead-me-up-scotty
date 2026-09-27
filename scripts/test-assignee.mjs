@@ -46,7 +46,7 @@ try {
     }
     return route.fulfill({ json: beads.find((b) => path.endsWith(`/beads/${b.id}`)) ?? {} });
   });
-  await page.goto(`${base}/p/demo`);
+  await page.goto(`${base}/p/demo?view=board`);
   await page.getByRole("heading", { name: "Board", exact: true }).waitFor();
   await page.getByText("Alice alpha task", { exact: true }).waitFor();
 

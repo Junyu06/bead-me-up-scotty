@@ -67,7 +67,7 @@ try {
     await page.getByRole("heading", { name: "Epics", exact: true }).waitFor();
   };
 
-  await page.goto(`${base}/p/demo`);
+  await page.goto(`${base}/p/demo?view=board`);
   await page.getByRole("heading", { name: "Board", exact: true }).waitFor();
   await openChildDetail();
   await navigateFromList();

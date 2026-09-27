@@ -46,11 +46,11 @@ try {
     return route.fulfill({ json: {} });
   });
 
-  // First visit remains Board; opening through a query preserves unrelated URL state.
+  // First visit opens Overview; opening through a query preserves unrelated URL state.
   await page.goto(`${base}/p/demo?bead=child&custom=keep#anchor`);
   await page.getByRole("dialog").getByText("Child bead", { exact: true }).waitFor();
   assert.equal(new URL(page.url()).searchParams.get("bead"), "child");
-  assert.equal(await page.getByRole("heading", { name: "Focus", exact: true }).count(), 0, "a query-opened drawer must not opt into Focus");
+  assert.equal(await page.getByRole("heading", { name: "Overview", exact: true }).count(), 1, "a query-opened drawer uses the Overview default");
   await page.reload();
   await page.getByRole("dialog").getByText("Child bead", { exact: true }).waitFor();
   assert.equal(page.url(), `${base}/p/demo?bead=child&custom=keep#anchor`, "reload retains the exact share URL");
@@ -72,6 +72,7 @@ try {
   await page.getByRole("dialog").getByText("Blocked bead", { exact: true }).waitFor();
   assert.equal(new URL(page.url()).searchParams.get("bead"), "blocked");
   await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "Board", exact: true }).click();
   const closed = new URL(page.url());
   assert.equal(closed.searchParams.get("bead"), null);
   assert.equal(closed.searchParams.get("custom"), "keep");

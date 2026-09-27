@@ -33,7 +33,7 @@ try {
   await page.goto(`${base}/p/demo`);
   await page.locator('article').first().waitFor();
   assert.equal(await page.evaluate(() => localStorage.getItem('bmus.view.demo')), null);
-  assert.equal(await page.getByRole('heading', { name: 'Focus', exact: true }).count(), 0, 'Board is first-visit default');
+  assert.equal(await page.getByRole('heading', { name: 'Overview', exact: true }).count(), 1, 'Overview is first-visit default');
   await page.getByRole('button', { name: 'Focus', exact: true }).click();
   await page.getByRole('heading', { name: 'Focus', exact: true }).waitFor();
   const column = name => page.locator('section').filter({ has: page.getByRole('heading', { name, exact: true }) });
@@ -63,7 +63,7 @@ try {
   await page.getByTitle('Close', { exact: true }).click();
   await page.goto(`${base}/p/demo`); // An ordinary project link uses the default.
   await page.locator('article').first().waitFor();
-  assert.equal(await page.getByRole('heading', { name: 'Focus', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('heading', { name: 'Overview', exact: true }).count(), 1);
   await page.getByRole('button', { name: 'Focus', exact: true }).click();
   await page.getByRole('button', { name: 'alpha', exact: true }).click();
   beads.forEach(b => { b.labels = []; });
@@ -81,5 +81,5 @@ try {
   await page.locator('article').first().waitFor();
   assert.equal(await page.getByRole('heading', { name: 'Focus', exact: true }).count(), 0);
   assert.deepEqual(errors, []);
-  console.log('PASS: Board default, optional Focus, blocking columns, hierarchy, lane filters, archived exclusion, and read-only detail navigation');
+  console.log('PASS: Overview default, optional Focus, blocking columns, hierarchy, lane filters, archived exclusion, and read-only detail navigation');
 } finally { await browser.close(); }

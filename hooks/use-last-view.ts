@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { isView, type View } from "@/lib/views";
+import { defaultView, isView, type View } from "@/lib/views";
 import { useDefaultFocus } from "@/hooks/use-default-view";
 import { useUrlState } from "@/hooks/use-url-state";
 
@@ -9,7 +9,7 @@ export function useLastView(): [View, (v: View) => void] {
   const { enabled } = useDefaultFocus();
   const { searchParams, updateUrl } = useUrlState();
   const requested = searchParams.get("view");
-  const view = isView(requested) ? requested : enabled ? "focus" : "board";
+  const view = isView(requested) ? requested : defaultView(enabled);
   const setView = React.useCallback((next: View) => {
     updateUrl(params => params.set("view", next));
   }, [updateUrl]);

@@ -11,9 +11,9 @@ try {
   const heading = name => page.getByRole('heading', { name, exact: true }).waitFor();
   const project = async name => { await page.goto(`${base}/p/demo`); await heading(name); };
   const toggle = page.getByRole('switch', { name: 'Use Focus as the default view' });
-  await project('Board');
+  await project('Overview');
   await page.evaluate(() => localStorage.setItem('bmus.view.demo', 'focus'));
-  await project('Board'); // Old remembered-view storage is still ignored.
+  await project('Overview'); // Old remembered-view storage is still ignored.
   await nav('Settings');
   assert.equal(await toggle.getAttribute('aria-checked'), 'false');
   await toggle.click();
@@ -28,11 +28,11 @@ try {
   await nav('Settings');
   assert.equal(await toggle.getAttribute('aria-checked'), 'true');
   await toggle.click();
-  await project('Board');
+  await project('Overview');
   await nav('Focus');
   await page.reload();
   await heading('Focus');
-  await project('Board'); // Visiting Focus does not opt into a different default.
+  await project('Overview'); // Visiting Focus does not opt into a different default.
   await nav('Settings');
   assert.equal(await toggle.getAttribute('aria-checked'), 'false');
   await toggle.click();
@@ -41,5 +41,5 @@ try {
   await otherPage.goto(`${base}/p/demo`);
   await otherPage.getByRole('button', { name: 'Settings', exact: true }).click();
   assert.equal(await otherPage.getByRole('switch', { name: 'Use Focus as the default view' }).getAttribute('aria-checked'), 'false');
-  console.log('PASS: Board default, explicit Focus opt-in, explicit view URLs and reloads, ignored legacy view preference, browser isolation');
+  console.log('PASS: Overview default, explicit Focus opt-in, explicit view URLs and reloads, ignored legacy view preference, browser isolation');
 } finally { await browser.close(); }

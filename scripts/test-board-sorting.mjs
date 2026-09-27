@@ -91,7 +91,7 @@ try {
       localStorage.setItem("bmus.board", JSON.stringify({ sortMode: "obsolete" }));
     }
   });
-  await page.goto(`${base}/p/demo`);
+  await page.goto(`${base}/p/demo?view=board`);
   await page.getByRole("heading", { name: "Board", exact: true }).waitFor();
   await card("manual-a").waitFor();
   assert.equal(await sort().inputValue(), "manual", "unknown saved mode falls back to manual");

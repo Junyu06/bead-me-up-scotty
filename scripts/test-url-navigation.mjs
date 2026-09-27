@@ -78,7 +78,7 @@ try {
   await expectIds(['alpha','beta','blank','literal','recent','old']);
   assert.equal(params().get('done'),null);
   await page.goto(`${base}/p/demo?view=board&done=nonsense&assignee=__unassigned__`); await heading('Board'); await expectIds(['literal']);
-  await page.goto(`${base}/p/demo?view=invalid`); await heading('Board');
+  await page.goto(`${base}/p/demo?view=invalid`); await heading('Overview');
   await page.goto(`${base}/p/demo?view=focus`); await heading('Focus');
   // Real Back/Forward restores drawer ids recorded alongside view/filter entries.
   await page.goto(`${base}/p/demo?view=board&bead=alpha&custom=keep#anchor`);
