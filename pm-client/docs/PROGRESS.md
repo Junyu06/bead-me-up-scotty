@@ -2,6 +2,10 @@
 
 Updated 2026-09-27. The interactive preview includes completion-filter, legibility, workflow fixes, ticket terminology and a collapsible workspace header. UI-02 has not started. Current verification and remaining limitations are separated below.
 
+## Detail dismissal follow-up
+
+Clicking the gray area outside a detail panel now uses the same close action as Escape and the close button. Edit and response drafts retain their discard/continue confirmation. A pointer press inside the panel followed by release outside does not dismiss it, and a background click does not activate the navigation beneath it. The browser regression covers these paths and expanded reading mode.
+
 ## Latest verification: workspace header
 
 - Project Overview, Board, Map and Timeline default to expanded headers. Vertical scroll intent collapses the title and filters with a short transition; upward intent or the persistent toggle restores them. Need Me shares the filter behavior. Switching views or projects resets to expanded.

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import {
   ArrowUpRight,
   Check,
@@ -26,6 +26,17 @@ import {
 } from "./domain";
 import { StageBadge } from "./ui";
 
+function isDialogBackdrop(event: MouseEvent<HTMLDialogElement>): boolean {
+  const bounds = event.currentTarget.getBoundingClientRect();
+  return (
+    event.target === event.currentTarget &&
+    (event.clientX < bounds.left ||
+      event.clientX > bounds.right ||
+      event.clientY < bounds.top ||
+      event.clientY > bounds.bottom)
+  );
+}
+
 export function Detail({
   item,
   index,
@@ -48,6 +59,7 @@ export function Detail({
   onRespond: (id: string, body: string) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const backdropPress = useRef(false);
   const [full, setFull] = useState(false);
   const [edit, setEdit] = useState(false);
   const [draft, setDraft] = useState(item);
@@ -131,6 +143,22 @@ export function Detail({
       ref={dialog}
       className={`detail-dialog ${full ? "full" : ""}`}
       aria-label={`${item.id} 详情`}
+      onPointerDownCapture={(event) => {
+        backdropPress.current = event.button === 0 && isDialogBackdrop(event);
+      }}
+      onPointerCancel={() => {
+        backdropPress.current = false;
+      }}
+      onClick={(event) => {
+        // Both ends must be on the backdrop; dragging text out of the panel
+        // must not close it. Use the same draft guard as Escape and the X.
+        const dismiss =
+          backdropPress.current &&
+          event.button === 0 &&
+          isDialogBackdrop(event);
+        backdropPress.current = false;
+        if (dismiss) requestClose();
+      }}
       onCancel={(e) => {
         e.preventDefault();
         requestClose();
