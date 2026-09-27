@@ -46,7 +46,13 @@ function restore(): { view: View; filters: Filters; projectSearch?: string } {
     )
       return {
         view: p.view,
-        filters: { ...emptyFilters, ...p.filters },
+        filters: {
+          ...emptyFilters,
+          ...p.filters,
+          owner: assignees(createFixture().items).includes(p.filters?.owner)
+            ? p.filters.owner
+            : "all",
+        },
         projectSearch: p.projectSearch ?? "",
       };
   } catch {

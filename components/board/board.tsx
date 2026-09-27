@@ -27,6 +27,7 @@ import { matchesFilters, labelOptionsFrom, assigneeOptionsFrom } from "@/lib/fil
 import {
   BOARD_COLUMNS as COLUMNS,
   sortBoardCards,
+  colOf,
   type BoardSortMode,
 } from "@/lib/board-columns";
 import { BeadCardOverlay } from "./bead-card";
@@ -192,7 +193,8 @@ export function Board() {
   const sourceColumnId = draggingId ? colOfBead.get(draggingId) : undefined;
   const dropColumn = COLUMNS.find(
     (c) => c.id === overColumnId && c.id !== sourceColumnId && c.droppable && c.status &&
-      draggingBead?.status !== c.status,
+      draggingBead && draggingBead.status !== c.status &&
+      colOf({ ...draggingBead, status: c.status }, index) === c.id,
   );
 
   return (

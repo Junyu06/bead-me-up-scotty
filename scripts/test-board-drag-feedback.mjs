@@ -83,7 +83,7 @@ try {
     page.evaluate(({ x, y, text }) =>
       document.elementsFromPoint(x, y).some((element) => element.closest("article")?.textContent?.includes(text)), { ...point, text: title });
 
-  await page.goto(`${base}/p/demo`);
+  await page.goto(`${base}/p/demo?view=board`);
   await page.getByRole("heading", { name: "Board", exact: true }).waitFor();
   const unlock = await context.request.put(`${base}/api/viewer-mode`, { data: { readOnly: false } });
   assert.equal(unlock.status(), 200, "isolated demo can be unlocked for mutation assertions");
@@ -143,6 +143,16 @@ try {
   await page.mouse.up();
   await page.waitForTimeout(250);
   assert.equal(writes.length, blockedWrites, "a dependency-blocked bead cannot be unblocked by setting open again");
+
+  // A manually blocked card can also have unfinished prerequisites.
+  beads.push({ ...bead("blocked-manual", "blocked"), dependencies: [{ depends_on_id: "filler-1", type: "blocks" }] });
+  await page.reload();
+  await card("blocked-manual").waitFor();
+  await pickUp("blocked-manual");
+  await hoverCard("filler-1");
+  assert.equal(await zoneHighlighted("Ready"), false, "changing blocked to open still cannot move an unresolved dependency to Ready");
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
 
   assert.deepEqual(errors, []);
   console.log("PASS: cross-column drag shows a travelling preview and target highlight, still writes status on drop, and cancels cleanly");
