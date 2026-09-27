@@ -1,283 +1,78 @@
-## Personal fork
+# Beads PM — Scotty fork
 
-This fork adds project-based quick capture and project management on top of the local Beads tracker. Business project membership stays in `project:*` labels; an app-local catalog also keeps empty project names. Removing a project category keeps its tasks.
+English | [简体中文](README.zh-CN.md)
 
-The customized branch is `local/simple-project-backlog`. `origin` points to this fork; `upstream` points to `brendan-appstart/bead-me-up-scotty`. App updates follow the checkout's configured tracking branch.
+This repository is a fork of [Bead Me Up, Scotty](https://github.com/brendan-appstart/bead-me-up-scotty). It contains the existing Scotty application and **Beads PM**, a Mac project-management client developed in `pm-client/` with shared Scotty helpers.
 
-To incorporate changes from the original project, start with a clean checkout of the customized branch:
+## Choose an application
+
+| Application | Source | Data | Start |
+|---|---|---|---|
+| Beads PM preview | [`pm-client/`](pm-client/README.md) | Synthetic records; edits last for the current session | `npm --prefix pm-client run dev` |
+| Scotty | `app/`, `components/`, `lib/` | A configured local Beads workspace, or Scotty's demo data | `npm run dev` |
+
+Beads PM currently provides Projects, Board, Map, Need Me, a shared detail panel and a project Timeline. The preview supports creation, editing, individual acceptance, decision/action responses and completion-date filters. It does not yet connect to a real Beads workspace. Reloading restores the sample records; display preferences remain local.
+
+## Run Beads PM
+
+Use Node.js 22.12 or later and npm. The preview has been checked with Node.js 22.23.2 and npm 10.9.8. Install dependencies for both applications because the preview imports Scotty's shared schema and checklist helper.
+
+From the repository root:
 
 ```sh
-git fetch upstream
-git merge upstream/main
 npm ci
-npm run build
-git push origin local/simple-project-backlog
+npm --prefix pm-client ci
+npm --prefix pm-client run dev
 ```
 
-Resolve any merge conflicts and verify the changed workflows before publishing the updated branch. The merge updates application code; it does not upload or synchronize the local Beads database. Do not use GitHub's discard-changes sync option on the customized branch.
+Open [http://127.0.0.1:1420](http://127.0.0.1:1420). This starts Vite, independently of Scotty's Next.js server.
 
-<div align="center">
+For a local macOS app, install Rust/Cargo and the Xcode command-line tools, then run:
 
-<h1>🛸 Bead Me Up, Scotty</h1>
-
-<p>
-  <b>The free, open-source visual UI for <a href="https://github.com/gastownhall/beads">Beads</a></b> — Steve Yegge's
-  graph-based issue tracker for AI coding agents.<br/>
-  <i>Brainstorm, create, and organize work in the same place your AI agent does.</i>
-</p>
-
-<p>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-6d5ef0?style=flat-square" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js&logoColor=white" alt="Next.js 16">
-  <img src="https://img.shields.io/badge/Run_anywhere-scotty-22c55e?style=flat-square" alt="Global CLI: scotty">
-  <a href="https://github.com/brendan-appstart/bead-me-up-scotty/stargazers"><img src="https://img.shields.io/github/stars/brendan-appstart/bead-me-up-scotty?style=flat-square&color=eab308" alt="GitHub stars"></a>
-</p>
-
-<a href="https://youtu.be/0zpg_FRX-wE" title="Watch the 2-minute demo">
-  <img src=".github/screens/board.png" alt="Bead Me Up, Scotty — click to watch the demo" width="860">
-</a>
-
-<p><b>▶️ <a href="https://youtu.be/0zpg_FRX-wE">Watch the 2-minute demo</a></b></p>
-
-<p>
-  <a href="https://beadmeupscotty.com"><b>🌐 Website</b></a> ·
-  <a href="https://youtu.be/0zpg_FRX-wE"><b>▶️ Demo video</b></a> ·
-  <a href="https://github.com/brendan-appstart/bead-me-up-scotty"><b>⭐ Star the repo</b></a> ·
-  <a href="https://github.com/gastownhall/beads"><b>🧵 Beads</b></a>
-</p>
-
-<table>
-  <tr>
-    <td width="50%" align="center"><img src=".github/screens/detail.png" alt="Detail drawer with inline editing"><br/><sub><b>Detail drawer — inline edit, deps & comments</b></sub></td>
-    <td width="50%" align="center"><img src=".github/screens/graph.png" alt="Interactive dependency graph"><br/><sub><b>Live dependency graph</b></sub></td>
-  </tr>
-</table>
-
-</div>
-
----
-
-A local, single-user web UI for **[beads](https://github.com/gastownhall/beads)**
-(`bd`) — Steve Yegge's distributed graph issue tracker. beads ships a powerful CLI
-but no interactive visualizer that also lets you *create* work. This app is that
-visualizer: a fast, graph-aware task board for humans, on top of a tracker built
-for AI agents.
-
-## Features
-
-- **Board** — a six-column view (Ideas · Ready · In Progress · Blocked · On hold · Done)
-  with dense cards showing id, type, priority, assignee, dep/comment counts, and an
-  origin badge. Filter by type / priority / origin, full-text search, and a
-  show/hide-archived toggle. Keyboard: `n` new, `/` search, `Esc` close.
-- **Ideas ↔ Ready drag-and-drop** — drag cards between columns to change status
-  (Ideas = `idea`, On hold = `deferred`, Done = `bd close`); updates are optimistic.
-- **Create / edit** — add tasks and epics (type, priority, description, assignee,
-  labels, parent epic, start-as-idea) and edit status/priority inline.
-- **Epics & progress** — epics with live `closed ÷ children` progress bars and
-  expandable child lists; add a child straight into an epic.
-- **Dependencies & graph** — view/add/remove typed dependencies in the detail
-  drawer, plus an interactive React Flow dependency graph (drag node→node to link).
-- **Comments** — author-stamped comment threads with a composer on every bead.
-- **Bead links** — open a bead directly with `/p/<project>?bead=<id>`. The address
-  bar follows the open drawer; its **Copy link** button copies a shareable link,
-  including in read-only mode. Drawer navigation keeps its own Back trail.
-- **Archive & delete** — archive (reversible `bd close` + `archived` label) or
-  delete (`bd delete`, behind a confirm).
-- **Human-vs-agent attribution** — every bead and comment shows 👤 (human) or 🤖
-  (agent), derived from a configurable human allowlist.
-- **Settings** — repo path, human actor + allowlist, poll interval, and light/dark
-  theme. Live polling keeps the board fresh when agents change data underneath you.
-
-## How it works
-
-- **beads has no HTTP API**, so the app shells out to the `bd` CLI
-  (`bd … --json`, `BD_JSON_ENVELOPE=1`). `bd` stays the single source of truth —
-  the app adds **zero** new persisted schema. The only adapter is
-  [`lib/bd.ts`](lib/bd.ts); see the spec in [`design/design.md`](design/design.md).
-- The UI was designed in **Claude Design** and rebuilt faithfully here with
-  Next.js + shadcn/Tailwind. The original export and a screen/token map live in
-  [`design/ui-export/`](design/ui-export/).
-
-### Ideas, execution & attribution
-- New cards default to **Ideas** (`idea`): something worth discussing, with the
-  approach and execution decision still open. The adapter registers BD's supported
-  custom status `idea:wip`, preserving other custom statuses. This keeps ideas in
-  `bd list` and out of `bd ready`; the category controls queue visibility.
-- **Ready** = `open` and unblocked; **On hold** = `deferred`, for an explicit
-  decision to pause. Dragging between columns runs `bd update --status` / `bd close`.
-- Asking an AI to research a card authorizes discussion in its current state.
-  Move to execution when its scope and the requested action are agreed.
-- beads has no human-vs-agent flag, so the UI stamps its own writes with a
-  configured **human actor** (`BEADS_ACTOR`); anyone in the human allowlist renders
-  as 👤, everyone else as 🤖. **Archive** = `bd close` + an `archived` label
-  (reversible); **Delete** = `bd delete`.
-
-## Run it
-
-**Prerequisites:** Node 20+ and npm. For live mode you also need the
-[`bd`](https://github.com/gastownhall/beads) binary on your `PATH` and a `.beads`
-repo (`bd init`). No `bd`? The app falls back to demo mode automatically.
-
-```bash
-npm install
-npm run dev            # http://localhost:3000
+```sh
+npm --prefix pm-client run desktop:build -- --debug
 ```
 
-- **With real data:** run from (or point Settings at) a directory containing a
-  `.beads` repo, with `bd` on your `PATH`. Override the repo with
-  `BEADS_REPO=/path/to/project` and the binary with `BD_BIN=/path/to/bd`.
-- **Demo mode:** if `bd` isn't installed (or you set `BEADS_DEMO=1`), the app runs
-  against an in-memory dataset seeded from the design export — so you can explore
-  every feature without beads. The sidebar shows which mode is active.
+The bundle is written to `pm-client/src-tauri/target/debug/bundle/macos/Beads PM Preview.app`. It embeds the frontend and does not need a development server. This is a development build; distribution signing and notarization are not complete.
 
-Set the human actor / allowlist, repo path, and theme in **Settings** (stored
-under your OS config dir, not in beads).
+## Development checks
 
-### Focus view
-
-**Focus** is an optional view for current work: In flight, Blocked, and Next up
-(open, unblocked P0/P1 work). Board is the default whenever you open or reload a
-project. Enable **Use Focus as the default view** in Settings to start in Focus instead. This toggle is off
-by default and saves automatically for all projects in the current browser.
-Lower-priority backlog and completed work remain
-available in Board and List.
-
-Set `SCOTTY_LANE_PREFIX=ctx:` to enable lane filters from labels such as
-`ctx:frontend`. Without a prefix, lane filters are hidden. If a selected lane
-vanishes during a live refresh, Focus shows all lanes again.
-
-### Read-only viewing
-
-Enable **Read-only mode** in Settings to monitor progress without editing beads.
-The slim **Read Only Mode** banner stays above the project workspace. Click it
-to keep or disable the mode, choose a small or large banner, or pick its background
-and text colors. Appearance changes are saved automatically in this browser.
-
-The mode applies to the current browser session, including its other tabs. A
-session cookie preserves it through reloads; browser session restoration may
-also restore that cookie. Other browser sessions are unaffected. Settings lets
-you enable it again after dismissing the banner.
-
-Set `SCOTTY_READ_ONLY=1` (or `true`) when launching Scotty to make read-only the
-default for new browser sessions. A browser can explicitly override that default
-from the banner. This is a local viewing preference, not a permissions system.
-Project write requests are rejected by the server while the requesting browser
-is read-only; application settings remain available.
-
-### Docker
-
-```bash
-docker build -t bead-me-up-scotty .
-docker run -p 3000:3000 bead-me-up-scotty      # → http://localhost:3000
+```sh
+npm --prefix pm-client test
+npm --prefix pm-client run lint
+npm --prefix pm-client run build
 ```
 
-> The build runs `npm ci`, which needs the committed `package-lock.json` for
-> reproducible installs. The lockfile is tracked in the repo (a `.gitignore`
-> negation keeps it that way even if your global gitignore excludes lockfiles),
-> so a clean clone builds without a prior `npm install`.
+The tests use synthetic data and do not invoke `bd`. See [verification and remaining work](pm-client/docs/PROGRESS.md) for the distinction between automated, browser and native checks. Real-data integration remains a separate development stage.
 
-The image includes the `bd` CLI, so real data works out of the box — just
-mount your project directory and point `BEADS_REPO` at it:
+## Repository layout
 
-```bash
-BEADS_REPO=/path/to/project
-docker run -d -p 3000:3000 \
-  --name beads_ui \
-  -v $BEADS_REPO:/data \
-  -e BEADS_REPO=/data \
-  bead-me-up-scotty
+```text
+pm-client/          Beads PM: React, TypeScript, Vite and a Tauri shell
+app/                Scotty: Next.js pages and API routes
+components/         Scotty UI components
+lib/                Scotty's BD adapter and shared helpers
+desktop/            Scotty's existing macOS shell
+docs/scotty.md      Scotty setup, features and operation
 ```
 
-The container runs as a non-root `nextjs` user with `HOME=/home/nextjs` and
-`XDG_CONFIG_HOME=/home/nextjs/.config`, so `bd` and app settings have a valid
-runtime config directory. On Linux, if `bd` fails with permission errors writing
-to the mounted `.beads` directory, run as your host user: `--user $(id -u):$(id -g)`
-(the config dirs are world-writable, so settings keep working). Settings live
-inside the container, so they are lost when it is recreated — bind-mount the
-config dir to keep them:
+The two desktop shells have separate application identifiers. Beads PM reuses selected helpers and the current Scotty icon; it does not start Scotty's server or import its mutable BD adapter.
 
-```bash
--v "$HOME/.config/bead-me-up-scotty:/home/nextjs/.config/bead-me-up-scotty"
-```
+## Scotty and the fork
 
-Container limitations:
+For the existing application, follow the [Scotty guide](docs/scotty.md) and [desktop setup](desktop/README.md). Scotty can operate on real local Beads data when configured; the PM preview cannot.
 
-- The image has no `git`, so Dolt remote sync (`refs/dolt/data`) and `bd init`
-  don't work inside it — run those on the host. UI edits (create/update/close)
-  work fine; they just won't auto-push until you sync from the host.
-- **Refine with AI** shells out to the Claude Code CLI, which isn't bundled;
-  the button shows an error in the container.
-- The bundled `bd` version is pinned in the Dockerfile (`ARG BD_VERSION`);
-  override with `--build-arg BD_VERSION=<version>` to match your host.
+- Fork: [Junyu06/bead-me-up-scotty](https://github.com/Junyu06/bead-me-up-scotty).
+- Upstream: [brendan-appstart/bead-me-up-scotty](https://github.com/brendan-appstart/bead-me-up-scotty).
+- Customized development branch: `local/simple-project-backlog`.
+- Upstream updates are reviewed and merged into the customized branch; fork changes are preserved.
 
-## Install globally
+The repository stores application source. Local `.beads` databases, credentials, machine configuration, dependencies and generated app bundles are excluded from source commits.
 
-Install once from a clone, then run `scotty` (or `bead-me-up-scotty`) from **any**
-directory. It starts the production server on a free port (default 3000) and opens
-your browser. Run it from a folder that has a `.beads` repo to jump straight to
-that project; otherwise you get the project picker. Requires Node 20+.
+## Documentation and license
 
-Flags: `-p, --port <n>` · `--no-open` · `--help`.
+- [Beads PM guide](pm-client/README.md) · [中文使用说明](pm-client/README.zh-CN.md)
+- [Design](pm-client/docs/DESIGN.md) · [Beads integration boundary](pm-client/docs/BD_CONTRACT.md)
+- [Progress and verification](pm-client/docs/PROGRESS.md)
 
-**Recommended — `npm link` (keep the clone):**
-
-```bash
-git clone <repo-url> bead-me-up-scotty
-cd bead-me-up-scotty
-npm install
-npm run build
-npm link
-scotty                 # from anywhere
-```
-
-The global command is a symlink to the clone, so keep it on disk and re-run
-`npm run build` after pulling changes. Uninstall: `npm rm -g bead-me-up-scotty`.
-
-**Alternative — global copy (clone is deletable):**
-
-```bash
-git clone <repo-url> bead-me-up-scotty
-cd bead-me-up-scotty
-npm install
-rm -rf .next           # ensure a clean build (only the prod build is shipped)
-npm run build
-npm install -g .
-scotty                 # from anywhere; the clone can now be deleted
-```
-
-To update, rebuild and re-run `npm install -g .`. If `npm install -g .` hits a
-permissions error, use a user-owned npm prefix:
-`npm config set prefix ~/.npm-global` and add `~/.npm-global/bin` to your `PATH`.
-
-## Stack
-
-Next.js 16 (App Router) · React 19 · TypeScript · Tailwind v4 · shadcn/ui ·
-TanStack Query (polling + optimistic DnD) · dnd-kit (board) · @xyflow/react
-(dependency graph) · Zod (validates `bd` output *and* forms).
-
-## Project layout
-
-```
-app/                  # pages + API route handlers (the only server entry points)
-  api/beads/**        # GET list, POST create, [id] PATCH/DELETE, status, comments, deps, archive
-  api/doctor, config  # bd preflight + local config
-lib/
-  bd.ts               # the ONLY bd CLI bridge (execFile, JSON envelope, write mutex)
-  demo-store.ts       # in-memory fallback seeded from the export
-  store.ts            # picks bd vs demo
-  schema.ts           # Zod schemas + types (bd data model)
-  beads-view.ts       # pure view-model helpers (status/priority colors, blocked, epic progress)
-  attribution.ts      # human-vs-agent origin
-components/           # sidebar, board (dnd), detail drawer, create modal, epics, graph, settings
-```
-
-## Verify
-
-```bash
-npm run build         # typecheck + production build
-npm run lint          # eslint
-```
-
-## License
-
-[MIT](LICENSE) © Brendan
+[MIT](LICENSE). The original Scotty project is by Brendan; its copyright notice is retained in `LICENSE`. Beads PM is developed in this fork.
