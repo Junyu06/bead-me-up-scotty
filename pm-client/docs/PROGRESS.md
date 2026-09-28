@@ -2,6 +2,14 @@
 
 Updated 2026-09-27. The native app now connects to a selected local BD workspace. The browser keeps the UI-01 examples. Earlier preview verification is retained below as history.
 
+## Map ordering, containment and edge routing
+
+The earlier native verification established loading and persistence, but did not establish readable layout on nested real records. A later Map review exposed reversed stage order, flattened descendants of executable parents, and default smooth-step edges crossing cards.
+
+The Map now orders sibling branches by prerequisite relationships with stable natural-order ties, retains executable parents as nested containers, and sizes containers from their children. Orthogonal routing avoids cards and headers; arrows point from prerequisite to dependent. Filtered endpoints are not silently projected onto parents, including when their ancestor is collapsed, and completed dependents no longer appear as active aggregate edges. External and hidden prerequisites remain available in the dependency list; missing records show their ID without a broken detail action. Local layout preferences use a new version so stale coordinates do not preserve the defective layout.
+
+Verification: the initial ordering and filtered-projection tests failed against the previous implementation. All 35 domain/model tests, lint, formatting and the release build pass. Chromium/WebKit checks sample rendered SVG paths against card/header rectangles and exercise folding, filtering and external or missing prerequisites. Independent review also checked dragging, persisted coordinates and long titles. An existing project was replayed read-only locally to inspect its hierarchy and path geometry. The final release app was installed, signature-verified and reopened with that project; order, nesting, routing and the filtered dependency list were checked in the native window. No BD records were modified for this correction.
+
 ## Native integration and copy revision
 
 - Rust commands validate the selected embedded workspace, use argument arrays with bounded process execution, and read complete lists plus native Ready/Blocked. Routing and server configurations are rejected. Reads/writes within this app serialize.

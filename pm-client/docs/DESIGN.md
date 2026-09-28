@@ -1,4 +1,4 @@
-# Preview design
+# Client design
 
 ## Visual direction
 
@@ -18,13 +18,19 @@ The fixture only models simple `blocks` dependencies. `stageOf()` and `acceptExa
 
 Explicit manual blocking and unresolved dependencies share one blocking predicate for project summaries, rows, Board cards and acceptance. Project summaries include review, decision and action requests. Need Me labels both its filtered count and the workspace count. Containers never enter executable readiness during sample acceptance.
 
-`MapView.tsx` uses React Flow `parentId` and relative positions for actual milestone containers. Parent membership is not rendered as dependency edges. `map-model.ts` projects existing blocking edges onto collapsed containers; aggregated edges never feed readiness. Default positions are created once and saved as local presentation preferences. Changes to a ticket do not move unrelated nodes or fit the viewport. Re-layout is explicit. Closing the example prerequisite updates its outgoing dependencies without closing its parent.
+`MapView.tsx` uses React Flow with a hierarchy-aware layout shared by rendering and edge routing. Sibling branches follow prerequisite order, with natural title/ID order for ties, so BD list order does not reverse the stages. Every record with children can be a container, including executable tasks; nested membership uses actual `parentId` and relative positions. Parent membership is never rendered as a dependency edge.
+
+Map arrows point from prerequisite to dependent. Existing unresolved `blocks` edges and additional native blocker IDs supply the graph; they do not recalculate Ready or mutate BD. Only deliberately collapsed ancestors can represent hidden endpoints. Filtering out a record never moves its dependency to an expanded parent, and closed dependents do not produce active edges.
+
+`map-routing.ts` computes orthogonal paths around card bounds and container headers, including after dragging. Container boundaries can be crossed when an endpoint belongs inside them, but unrelated containers and text remain obstacles. If an endpoint is physically covered by another card, the dependency is available in a list instead of drawing an unchecked path. Edge details show the original prerequisite/dependent titles. Repeated line labels are omitted; the toolbar identifies arrow direction.
+
+The v2 local preference key starts with a fresh layout and viewport, preventing the previous reversed or flat coordinates from masking this correction. Positions are local presentation data. Re-layout clears manual positions; it does not change membership or dependencies. Collapse, filters and view refresh use the same geometry model.
 
 The detail drawer is shared by all entry points. Example acceptance includes the exact ID and title, and acts on one ticket. Editing retains the draft, validates plan ranges and warns on leaving with unsaved changes. Markdown is rendered without raw HTML, active external links or remote images.
 
 Canceling edits restores the saved record in the same drawer; closing the drawer and navigating to another record are separate discard destinations. Canceling a navigation prompt clears that destination. Decision/action responses retain the original request, response text and timestamp, remove the pending request, and leave ticket status, dependencies and assignee unchanged. Response drafts are protected on close and reload. These records remain sample memory only.
 
-Creation uses ticket terminology: “新建工单”, “工单标题”, “工单描述” and “创建”. New tickets start in Idea with no project assignment, regardless of the current filters. Marketing slogans and repeated sample notices are removed; a single toolbar notice states the sample workspace and session-only persistence.
+Creation uses ticket terminology: “新建工单”, “工单标题”, “工单描述” and “创建”. New tickets start in Idea with no project assignment, regardless of the current filters. Marketing slogans and repeated sample notices are removed; the browser has one compact example reset notice; the native toolbar shows the selected workspace and a refresh action.
 
 Timeline distinguishes manual plan bars, deadline diamonds and dashed forecast intervals. Missing dates remain unspecified. Date-only values are split into calendar components, not passed through UTC conversion. The preview edits dates through detail; plan dragging and downstream schedule recommendations belong to UI-07.
 
@@ -33,9 +39,9 @@ Timeline distinguishes manual plan bars, deadline diamonds and dashed forecast i
 - `../lib/schema.ts`: Scotty's dependency normalization for flat list/export and expanded detail output.
 - `../lib/beads-view.ts`: pure checklist counting helper.
 - React Flow and Markdown libraries already used by Scotty.
-- `../desktop/icons/icon.png`: temporary application icon, covered by the existing MIT license.
+- Lucide Layers2: the sidebar and app icon share the same geometry, with the ISC notice under `src-tauri/icons/`.
 
-The existing UI, Next.js server, API routes, native process manager and mutable workspace adapter are not imported by this frontend. The preview's Rust entry point registers no IPC commands or plugins. Its capabilities list is empty and its packaged content security policy restricts remote loads.
+The existing UI, Next.js server, API routes, native process manager and mutable workspace adapter are not imported by this frontend. The native Rust entry point exposes typed local BD commands documented in `BD_CONTRACT.md`. Its capabilities list is empty and its packaged content security policy restricts remote loads.
 
 ## Technical references
 

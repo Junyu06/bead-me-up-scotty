@@ -6,7 +6,11 @@ import { spawnSync } from "node:child_process";
 // process is involved; the tests only consume synthetic data.
 await mkdir("test-results", { recursive: true });
 await build({
-  entryPoints: ["tests/domain.test.ts"],
+  stdin: {
+    contents: 'import "./tests/domain.test.ts"; import "./tests/map.test.ts";',
+    resolveDir: process.cwd(),
+    loader: "ts",
+  },
   outfile: "test-results/domain.test.mjs",
   platform: "node",
   format: "esm",

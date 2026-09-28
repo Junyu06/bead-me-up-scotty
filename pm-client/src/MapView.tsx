@@ -5,7 +5,8 @@ import {
   Controls,
   Handle,
   Position,
-  applyNodeChanges,
+  BaseEdge,
+  type EdgeProps,
   MarkerType,
   type Node,
   type Edge,
@@ -32,10 +33,16 @@ import {
   type Snapshot,
   type RecordItem,
 } from "./domain";
-import { initialPositions, mapScope, projectLinks } from "./map-model";
+import {
+  layoutMap,
+  mapRelations,
+  mapScope,
+  projectLinks,
+  type PositionMap,
+} from "./map-model";
+import { routeLink, routePath, type MapRoute } from "./map-routing";
 import { StageBadge } from "./ui";
 
-type PositionMap = Record<string, { x: number; y: number }>;
 function readPreference<T>(key: string, fallback: T): T {
   try {
     return JSON.parse(localStorage.getItem(key) ?? "null") ?? fallback;
@@ -62,12 +69,53 @@ type MapData = {
   history?: () => void;
   summary?: boolean;
   direct?: boolean;
+  contextOnly?: boolean;
 };
+function Ports({ container = false }: { container?: boolean }) {
+  return (
+    <>
+      <Handle
+        id="in-left"
+        type="target"
+        position={Position.Left}
+        style={container ? { top: 44 } : undefined}
+      />
+      <Handle
+        id="out-right"
+        type="source"
+        position={Position.Right}
+        style={container ? { top: 44 } : undefined}
+      />
+      {!container && (
+        <>
+          <Handle id="in-top" type="target" position={Position.Top} />
+          <Handle id="out-bottom" type="source" position={Position.Bottom} />
+        </>
+      )}
+    </>
+  );
+}
+function RoutedEdge({ id, data, markerEnd, selected }: EdgeProps) {
+  const route = data?.route as MapRoute;
+  return (
+    <BaseEdge
+      id={id}
+      path={routePath(route.points)}
+      markerEnd={markerEnd}
+      style={{
+        stroke: selected ? "#92543f" : "#b7836e",
+        strokeWidth: selected ? 2.3 : 1.4,
+      }}
+      interactionWidth={18}
+    />
+  );
+}
+const edgeTypes = { routed: RoutedEdge };
 function TicketNode({ data }: NodeProps) {
   const d = data as unknown as MapData;
   return (
     <>
-      <Handle type="target" position={Position.Left} />
+      <Ports />
       <button className="map-ticket nodrag" onClick={() => d.open(d.item.id)}>
         <span className="map-ticket-meta">
           <StageBadge stage={d.stage} />
@@ -79,7 +127,6 @@ function TicketNode({ data }: NodeProps) {
           {d.direct ? " · 直接属于项目" : ""}
         </code>
       </button>
-      <Handle type="source" position={Position.Right} />
     </>
   );
 }
@@ -87,7 +134,7 @@ function MilestoneNode({ data }: NodeProps) {
   const d = data as unknown as MapData;
   return (
     <>
-      <Handle type="target" position={Position.Left} />
+      <Ports container />
       <div className="map-group-header">
         <button
           className="nodrag"
@@ -98,7 +145,19 @@ function MilestoneNode({ data }: NodeProps) {
           <Flag size={14} />
           <strong>{d.item.title}</strong>
         </button>
-        <span>{d.count ? `${d.closed} / ${d.count} 已关闭` : "尚未拆分"}</span>
+        <span>
+          {d.item.role === "ticket" ? (
+            <StageBadge stage={d.stage} compact />
+          ) : null}
+          {d.count ? `${d.closed} / ${d.count} 子工单已关闭` : "暂无子工单"}
+          <button
+            className="map-open nodrag"
+            onClick={() => d.open(d.item.id)}
+            aria-label={`查看 ${d.item.title}`}
+          >
+            详情
+          </button>
+        </span>
       </div>
       {d.collapsed ? (
         <p className="map-group-summary">
@@ -108,18 +167,18 @@ function MilestoneNode({ data }: NodeProps) {
         </p>
       ) : (
         <>
-          <p className="map-group-caption">
-            {d.hidden ? `${d.hidden} 张未关闭工单被筛选隐藏` : "工单"}
-          </p>
+          {!!d.hidden && (
+            <p className="map-group-caption">
+              {d.hidden} 张未关闭工单被筛选隐藏
+            </p>
+          )}
           {d.closed! > 0 && (
             <button className="map-history nodrag" onClick={d.history}>
               {d.closed} 张已关闭工单 · 在 Board 查看 →
             </button>
           )}
-          {!d.count && <p className="map-group-summary">暂无工单</p>}
         </>
       )}
-      <Handle type="source" position={Position.Right} />
     </>
   );
 }
@@ -140,33 +199,23 @@ export function MapView({
   onOpen: (id: string) => void;
   onHistory: (milestone: string) => void;
 }) {
-  const key = `beads-pm:${snapshot.workspace}:${project.id}:map`;
+  const key = `beads-pm:${snapshot.workspace}:${project.id}:map:v2`;
   const [collapsed, setCollapsed] = useState<Set<string>>(
     () => new Set(readPreference<string[]>(`${key}:collapsed`, [])),
   );
   const [positions, setPositions] = useState<PositionMap>(() =>
-    readPreference(
-      `${key}:positions`,
-      initialPositions(mapScope(project.id, index)),
-    ),
+    readPreference(`${key}:positions`, {}),
   );
   useEffect(
     () => savePreference(`${key}:positions`, positions),
     [key, positions],
   );
   const [viewport, setViewport] = useState<Viewport>(() =>
-    readPreference(`${key}:viewport`, { x: 28, y: 30, zoom: 0.92 }),
+    readPreference(`${key}:viewport`, { x: 36, y: 72, zoom: 0.9 }),
   );
   const [flow, setFlow] = useState<ReactFlowInstance | null>(null);
   const [edgeDetail, setEdgeDetail] = useState<string | null>(null);
   const scope = useMemo(() => mapScope(project.id, index), [project.id, index]);
-  const groups = scope.filter((i) => i.role === "milestone");
-  const shown = scope.filter(
-    (i) =>
-      i.role === "ticket" &&
-      i.status !== "closed" &&
-      matches(i, filters, index),
-  );
   const toggle = (id: string) =>
     setCollapsed((old) => {
       const next = new Set(old);
@@ -175,104 +224,95 @@ export function MapView({
       savePreference(`${key}:collapsed`, [...next]);
       return next;
     });
-  const nodes: Node[] = groups.map((group, i) => {
-    const count = progress(group.id, snapshot, index);
-    const closed = collapsed.has(group.id);
+  const boxes = useMemo(
+    () => layoutMap(scope, index, collapsed, filters, positions),
+    [scope, index, collapsed, filters, positions],
+  );
+  const nodes: Node[] = boxes.map((box) => {
+    const item = index.byId.get(box.id)!;
+    const count = progress(item.id, snapshot, index);
     return {
-      id: group.id,
-      type: "milestone",
-      position: positions[group.id] ?? { x: i * 382, y: 0 },
-      style: {
-        width: 320,
-        height: closed
-          ? 118
-          : Math.max(
-              170,
-              ...scope
-                .filter((t) => t.parent === group.id && positions[t.id])
-                .map((t) => positions[t.id].y + 175),
-            ),
-      },
-      className: "map-group",
-      zIndex: 0,
-      data: {
-        item: group,
-        stage: stageOf(group, snapshot, index),
-        open: onOpen,
-        collapsed: closed,
-        toggle: () => toggle(group.id),
-        count: count.total,
-        closed: count.closed,
-        hidden: descendants(group.id, index).filter(
-          (item) =>
-            item.role === "ticket" &&
-            item.status !== "closed" &&
-            !matches(item, filters, index),
-        ).length,
-        history: () => onHistory(group.id),
-      },
-    };
-  });
-  const defaults = initialPositions(scope);
-  for (const item of shown) {
-    if (item.parent && collapsed.has(item.parent)) continue;
-    const grouped = nodes.some((n) => n.id === item.parent);
-    nodes.push({
-      id: item.id,
-      type: "ticket",
-      parentId: grouped ? item.parent : undefined,
-      extent: grouped ? "parent" : undefined,
-      position: positions[item.id] ?? defaults[item.id],
-      style: { width: 284, height: 122 },
+      id: box.id,
+      type: box.container ? "milestone" : "ticket",
+      parentId: box.parentId,
+      position: box.position,
+      style: { width: box.width, height: box.height },
+      className: box.container ? "map-group" : undefined,
+      zIndex: box.container ? 0 : 2,
       data: {
         item,
         stage: stageOf(item, snapshot, index),
         open: onOpen,
-        direct: !grouped,
+        collapsed: box.collapsed,
+        toggle: () => toggle(item.id),
+        count: count.total,
+        closed: count.closed,
+        hidden: descendants(item.id, index).filter(
+          (t) =>
+            t.role === "ticket" &&
+            t.status !== "closed" &&
+            !matches(t, filters, index),
+        ).length,
+        history: () => onHistory(item.id),
+        direct: item.parent === project.id,
+        contextOnly: box.contextOnly,
       },
-      zIndex: 2,
-    });
-  }
-  const visible = new Set(nodes.map((n) => n.id));
-  const links = projectLinks(scope, index, visible, collapsed);
-  const edges: Edge[] = links.map((link) => ({
-    id: `${link.source}:${link.target}`,
-    source: link.source,
-    target: link.target,
-    label:
-      link.tickets.length > 1 ? `${link.tickets.length} 条依赖` : "前置未关闭",
-    type: "smoothstep",
-    markerEnd: { type: MarkerType.ArrowClosed, color: "#b87963" },
-    style: { stroke: "#b87963", strokeWidth: 1.5 },
-    labelStyle: { fontSize: 12, fill: "#785447" },
-    labelBgStyle: { fill: "#fffaf7" },
-    zIndex: 1,
-  }));
-  const hiddenEdges = scope.reduce(
-    (count, item) =>
-      count +
-      item.dependencies.filter(
-        (d) =>
-          d.type === "blocks" &&
-          index.byId.get(d.depends_on_id)?.status !== "closed" &&
-          ((!visible.has(item.id) && !collapsed.has(item.parent ?? "")) ||
-            (!visible.has(d.depends_on_id) &&
-              !collapsed.has(index.byId.get(d.depends_on_id)?.parent ?? ""))),
-      ).length,
-    0,
+    };
+  });
+  const visible = new Set(boxes.map((b) => b.id));
+  const links = projectLinks(
+    scope,
+    index,
+    visible,
+    collapsed,
+    new Set(
+      scope
+        .filter((item) => matches(item, filters, index))
+        .map((item) => item.id),
+    ),
   );
+  const routed = useMemo(
+    () => links.map((link) => ({ link, route: routeLink(link, boxes) })),
+    [links, boxes],
+  );
+  const edges: Edge[] = routed.flatMap(({ link, route }) =>
+    route
+      ? [
+          {
+            id: `${link.source}:${link.target}`,
+            source: link.source,
+            target: link.target,
+            sourceHandle: route.sourceHandle,
+            targetHandle: route.targetHandle,
+            type: "routed",
+            data: { route },
+            ariaLabel: `${index.byId.get(link.source)?.title} → ${index.byId.get(link.target)?.title}`,
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              color: "#b7836e",
+              width: 16,
+              height: 16,
+            },
+            zIndex: 1,
+          },
+        ]
+      : [],
+  );
+  const drawn = new Set(
+    links.flatMap((l) => l.tickets.map((t) => `${t.from}:${t.to}`)),
+  );
+  const hiddenRelations = mapRelations(scope, index).filter(
+    (t) => !drawn.has(`${t.from}:${t.to}`),
+  );
+  const unrouted = routed.filter((r) => !r.route);
   const onNodesChange = (changes: NodeChange[]) => {
     const moved = changes.filter((c) => c.type === "position" && c.position);
     if (!moved.length) return;
-    const updated = applyNodeChanges(moved, nodes);
     setPositions((old) => {
       const next = { ...old };
-      for (const c of moved) {
-        if (c.type !== "position") continue;
-        const n = updated.find((n) => n.id === c.id);
-        if (n) next[n.id] = n.position;
-      }
-      savePreference(`${key}:positions`, next);
+      for (const change of moved)
+        if (change.type === "position" && change.position)
+          next[change.id] = change.position;
       return next;
     });
   };
@@ -281,31 +321,49 @@ export function MapView({
       <div className="map-toolbar">
         <span>
           <Flag size={14} />
-          归属 <span className="legend-arrow">→</span> 未解除的依赖
+          框：归属 <span className="legend-arrow">前置 → 后续</span>
         </span>
         <button
           className="quiet-button"
           onClick={() => {
-            const next = initialPositions(scope);
+            const next = {};
             setPositions(next);
             savePreference(`${key}:positions`, next);
-            flow?.setViewport({ x: 28, y: 30, zoom: 0.92 });
+            void flow?.setViewport({ x: 36, y: 72, zoom: 0.9 });
           }}
         >
           <RotateCcw size={14} />
           重排
         </button>
       </div>
-      {hiddenEdges > 0 && (
+      {hiddenRelations.length > 0 && (
         <p className="map-hidden">
           <Link2 size={13} />
-          {hiddenEdges} 条依赖涉及被筛选隐藏的工单，可在详情中查看完整前置。
+          {hiddenRelations.length} 条依赖未显示
+          <button
+            className="text-button"
+            onClick={() => setEdgeDetail("hidden")}
+          >
+            查看依赖
+          </button>
         </p>
+      )}
+      {!!unrouted.length && (
+        <div className="map-hidden">
+          {unrouted.length} 条依赖的端点被遮挡
+          <button
+            className="text-button"
+            onClick={() => setEdgeDetail("unrouted")}
+          >
+            查看依赖
+          </button>
+        </div>
       )}
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onInit={setFlow}
         defaultViewport={viewport}
@@ -336,19 +394,29 @@ export function MapView({
             收起
           </button>
           <strong>工单依赖</strong>
-          {links
-            .find((l) => `${l.source}:${l.target}` === edgeDetail)
-            ?.tickets.map((t) => (
-              <p key={`${t.from}:${t.to}`}>
-                <button onClick={() => onOpen(t.from)}>
-                  {index.byId.get(t.from)?.title}
-                </button>
-                <span> → </span>
-                <button onClick={() => onOpen(t.to)}>
-                  {index.byId.get(t.to)?.title}
-                </button>
-              </p>
-            ))}
+          {(edgeDetail === "hidden"
+            ? hiddenRelations
+            : edgeDetail === "unrouted"
+              ? unrouted.flatMap((r) => r.link.tickets)
+              : (links.find((l) => `${l.source}:${l.target}` === edgeDetail)
+                  ?.tickets ?? [])
+          ).map((t) => (
+            <p key={`${t.from}:${t.to}`}>
+              <button
+                disabled={!index.byId.has(t.from)}
+                onClick={() => onOpen(t.from)}
+              >
+                {index.byId.get(t.from)?.title ?? t.from}
+              </button>
+              <span> → </span>
+              <button
+                disabled={!index.byId.has(t.to)}
+                onClick={() => onOpen(t.to)}
+              >
+                {index.byId.get(t.to)?.title ?? t.to}
+              </button>
+            </p>
+          ))}
         </div>
       )}
     </div>
