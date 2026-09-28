@@ -179,12 +179,10 @@ try {
   await nav("Map");
   await expanded(true);
   const controls = await page.locator(".react-flow__controls").boundingBox();
-  const footer = await page.locator(".map-footer").boundingBox();
   assert.ok(
     controls.y + controls.height <= 650,
     "all Map controls fit the smallest window",
   );
-  assert.ok(footer.y + footer.height <= 650, "Map footer is not clipped");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await toggle.click();
   assert.equal(

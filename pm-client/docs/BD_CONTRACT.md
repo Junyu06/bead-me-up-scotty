@@ -1,37 +1,49 @@
-# Beads boundary — initial contract
+# Beads desktop contract
 
-**UI-01 is example-only.** No production adapter, real readiness projection, metadata write protocol, shell invocation, or workspace switch is enabled. A failed connection cannot silently switch to these fixtures because there is no connection mode in this delivery.
+Updated 2026-09-27 after the user selected an existing local workspace for real use. The native Tauri app uses typed Rust commands to call BD 1.2.2. The browser remains the synthetic UI preview. A failed native connection never selects fixtures.
 
-## Verified local CLI help and context
+## Workspace and transport
 
-| Capability                    | Evidence / next integration boundary                                                                                                                                            |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CLI discovery                 | Actual executable and version recorded in LOCAL_FACTS                                                                                                                           |
-| Workspace identity            | `bd -C <workspace> --readonly context --json` reads configuration without opening the database; output includes backend, database, redirected/worktree flags and resolved roots |
-| Complete list                 | Help confirms `list --all --limit 0 --include-gates --json`; default list limit is 50. Real output remains unverified because lock access failed                                |
-| Native ready                  | Help confirms `ready --limit 0 --json`; default is 100. Actual output and semantics remain unverified                                                                           |
-| Dates                         | `update --due`, `--defer`, `--estimate` are advertised by installed help. `defer` affects ready visibility and must not be reused as plan start                                 |
-| Metadata                      | `update --metadata`, `--set-metadata`, `--unset-metadata` are advertised. Preservation, value shapes and targeted patch behavior must be tested in an isolated database         |
-| Content                       | Installed help advertises `--title`, `--body-file`, `--acceptance`, `--design`, `--append-notes`, assignee, priority and incremental label updates                              |
-| Parent                        | Installed help advertises `update --parent`; real behavior and dependency preservation are not yet tested                                                                       |
-| Close / reopen / dependencies | Require current help inspection, isolated round-trip tests and native behavior verification in later units                                                                      |
+The user selects a workspace and BD executable. Settings live in the per-user app configuration directory, separate from application source. Discovery checks PATH and common Homebrew executable locations. No workspace, actor or issue ID from a developer's machine is compiled into the app.
 
-Scotty's existing schema normalizes flat dependencies and the expanded detail shape. UI-01 exercises that helper on synthetic input; this does not verify the present live output. Unknown live fields and metadata must be preserved by the eventual adapter.
+Each operation uses a process executable and argument array, no shell. IDs and writable fields are validated. Commands have a 30-second bound and a 32 MiB output bound. BD's database implementation owns the database files. The client reads `routes.jsonl` only as routing configuration; it never opens database tables directly.
 
-## Existing workflow documentation
+A global application mutex serializes connection, reads and writes. The canonical Beads directory, database and embedded mode identify the selected database. Every data operation verifies that identity, rejects redirected/server workspaces and checks routing configuration from DB and effective sources. Prefix routing is unsupported. Inherited BD/Beads environment overrides are removed; creation explicitly targets `--repo .`. This does not coordinate unrelated processes or make configuration checks atomic with the next CLI call.
 
-The workspace documentation describes `idea` as a custom WIP status, `deferred` as an explicit pause, epic parent-child membership, and native blocking dependencies. It describes handing off work with a human label and human assignee. Those conventions are documentation evidence, not a fresh database inventory. A human label alone does not identify review versus decision versus action.
+## Snapshot and projection
 
-UI-01's `request.kind`, `role`, `plan`, `forecast`, and `closure` are typed fixture fields only. They are **not an approved `pm_client` metadata protocol**, and are never persisted. UI-03/04 must agree on minimal markers using existing BD conventions and write a workflow contract before real writes are enabled.
+Reads use `list --all --limit 0 --include-gates --include-infra --include-templates`, `ready --limit 0` and `blocked`. A second list around the status queries must match the first; changes cause a bounded retry or an error. This is a consistency check across separate CLI calls, not a database transaction. Malformed data or inconsistent IDs are rejected. Missing parent/dependency records make the UI incomplete and disable writes. Refresh failure retains the previous view, clears Ready and disables writes until a complete refresh.
 
-## Requirements for the adapter
+Ready and blocking IDs come from native BD results. Fixture dependency calculations are never used for real readiness. Non-standard statuses remain unclassified rather than being guessed Ready. An epic with no parent becomes a project; a nested epic or native milestone becomes a milestone. Other records remain visible as tickets. The initial native release does not provide infrastructure-specific editors.
 
-Use typed business commands implemented in Rust with a configured executable and argument arrays. Validate IDs and allowed workspace roots; enforce timeout/output bounds; serialize by actual database identity. Do not expose arbitrary shell execution or access the database files directly.
+## Minimal workflow mapping
 
-Native `ready`/`blocked` are authoritative. Parent-child, conditional-blocks, waits-for, gates and exceptional release cannot be inferred from the simple demo rule. If context is incomplete, readiness is unknown. Review does not close a prerequisite.
+Existing BD fields remain authoritative: title, description, acceptance criteria, notes, status, priority, assignee, labels, dependencies, parent, due_at and closed_at. Unknown metadata and labels are not replaced by frontend projections.
 
-Real edits require a fresh read, minimal field updates and readback. Distinguish omitted values from explicit clears. Preserve unknown labels and metadata, including non-object metadata. A timed-out mutation is unresolved until its outcome is checked; do not blindly repeat creates or comments. A local queue alone does not eliminate races with external agents.
+- `human` alone means a pending human request (**待处理**), not review.
+- One explicit `pm:review`, `pm:decision` or `pm:action` label identifies a request kind. Conflicting explicit labels are shown as unclassified human requests. Notes provide request context. The app does not infer a reviewer or rewrite ownership from a label.
+- `metadata.pm_plan` contains ISO date-only `start` and `end`. Updates use BD's verified `--metadata` top-level merge. Other metadata keys and unknown plan properties remain intact. Non-object metadata cannot be edited as a plan.
+- Responses append notes and remove only the answered request labels. The original notes remain. Request changes also sets `in_progress`, retaining the assignee because the prior implementer cannot be reliably inferred.
+- An operation token in notes or the close reason identifies a retry. The client checks the resulting fields as well as the token; partial success is not treated as complete.
 
-Acceptance must use the verified native close operation for one explicit ID, with current delivery version and blockers re-read. Reopen invalidates reuse of earlier acceptance for a new delivery. UI-only overrides, automatic force, automatic parent closure and batch acceptance are outside the contract.
+This is the implemented protocol for the native release. Earlier UI-01 fixture-only `request`, `forecast`, `responses` and `closure` fields were not a persisted protocol. No migration rewrites existing records. Automatic forecast generation and a structured external delivery integration remain future work.
 
-This document records verified capabilities and remaining checks; it does not claim UI-02 or production readiness.
+## Editing, creation and recovery
+
+Opening a detail uses `show`, with a SHA-256 fingerprint of its returned record. A fresh `show` must match the editing baseline before mutation. This detects changes even within BD's one-second timestamp resolution. Only changed fields are sent, including explicit empty values for clears, and the result is read back. Refreshing a selected detail restores its `show` fingerprint instead of replacing it with a list timestamp.
+
+BD does not expose compare-and-swap for these edits. Another process can write after the last check, and a single `update` may apply fields and labels in separate steps. The client cannot promise atomic writes or rollbacks. A mismatch, timeout or partial failure preserves the UI draft and asks for inspection; it does not automatically replay a write.
+
+New tickets use an explicit operation-derived ID, then transition to configured `idea:wip`. The transition is a second CLI write. If it fails, the error reports the created ID. A retry with the same operation never creates a second ticket; an existing ticket in another state is reported for inspection. Creation retry tokens persist for that open form; restarting the app does not restore unfinished form drafts.
+
+## Closing and reopening
+
+Closing rereads the exact record and native blockers, then confirms the record fingerprint again. It passes one explicit ID to native `close`, with a revision and operation receipt in the reason; no force or continuation flag is used. Review closures can be identified as accepted, while earlier closures retain unknown acceptance provenance.
+
+BD auto-closes some molecule/ephemeral/template parents. The client rejects closing within those ancestor chains so an ordinary confirmation cannot silently close a parent. Regular parent projects are not automatically closed by the client.
+
+Reopening uses the verified `update --status open` behavior, which clears close timestamps/reason, removes old request labels and appends a receipt. Both reopen and request-response retries verify their terminal state; seeing a receipt alone is insufficient. An earlier acceptance is not reused after reopen.
+
+## Evidence
+
+Rust integration tests create their own temporary BD database. Independent review additionally tested same-second updates, metadata merge semantics, route changes and molecule parent closure. Browser tests use mocked IPC to check failed-save draft retention, repeated editing with fingerprints and failure states. Native app checks and the real workspace read are recorded separately in PROGRESS.md. No test mutates a user's real issue.

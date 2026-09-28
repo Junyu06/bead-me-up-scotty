@@ -8,10 +8,10 @@ This repository is a fork of [Bead Me Up, Scotty](https://github.com/brendan-app
 
 | Application | Source | Data | Start |
 |---|---|---|---|
-| Beads PM preview | [`pm-client/`](pm-client/README.md) | Synthetic records; edits last for the current session | `npm --prefix pm-client run dev` |
+| Beads PM | [`pm-client/`](pm-client/README.md) | Desktop: local BD; browser: synthetic preview | `npm --prefix pm-client run dev` |
 | Scotty | `app/`, `components/`, `lib/` | A configured local Beads workspace, or Scotty's demo data | `npm run dev` |
 
-Beads PM currently provides Projects, Board, Map, Need Me, a shared detail panel and a project Timeline. The preview supports creation, editing, individual acceptance, decision/action responses and completion-date filters. It does not yet connect to a real Beads workspace. Reloading restores the sample records; display preferences remain local.
+Beads PM currently provides Projects, Board, Map, Need Me, a shared detail panel and a project Timeline. The desktop app supports real BD creation, editing, request responses, individual close/reopen and completion-date filters. The browser preview uses synthetic records; reloading it resets edits.
 
 ## Run Beads PM
 
@@ -30,10 +30,10 @@ Open [http://127.0.0.1:1420](http://127.0.0.1:1420). This starts Vite, independe
 For a local macOS app, install Rust/Cargo and the Xcode command-line tools, then run:
 
 ```sh
-npm --prefix pm-client run desktop:build -- --debug
+npm --prefix pm-client run desktop:build
 ```
 
-The bundle is written to `pm-client/src-tauri/target/debug/bundle/macos/Beads PM Preview.app`. It embeds the frontend and does not need a development server. This is a development build; distribution signing and notarization are not complete.
+The bundle is written to `pm-client/src-tauri/target/release/bundle/macos/Beads PM.app`. It embeds the frontend and does not need a development server. On first launch, choose a local BD 1.2.2 embedded workspace. Distribution signing and notarization are not configured.
 
 ## Development checks
 
@@ -43,7 +43,7 @@ npm --prefix pm-client run lint
 npm --prefix pm-client run build
 ```
 
-The tests use synthetic data and do not invoke `bd`. See [verification and remaining work](pm-client/docs/PROGRESS.md) for the distinction between automated, browser and native checks. Real-data integration remains a separate development stage.
+The tests use synthetic data and do not invoke `bd`. See [verification and remaining work](pm-client/docs/PROGRESS.md) for the distinction between automated, browser and native checks. An opt-in Rust integration test uses a fresh temporary BD workspace.
 
 ## Repository layout
 
@@ -56,11 +56,11 @@ desktop/            Scotty's existing macOS shell
 docs/scotty.md      Scotty setup, features and operation
 ```
 
-The two desktop shells have separate application identifiers. Beads PM reuses selected helpers and the current Scotty icon; it does not start Scotty's server or import its mutable BD adapter.
+The two desktop shells have separate application identifiers. Beads PM reuses selected helpers, uses its own Layers2 icon and invokes BD through a typed Rust adapter.
 
 ## Scotty and the fork
 
-For the existing application, follow the [Scotty guide](docs/scotty.md) and [desktop setup](desktop/README.md). Scotty can operate on real local Beads data when configured; the PM preview cannot.
+For the existing application, follow the [Scotty guide](docs/scotty.md) and [desktop setup](desktop/README.md). Both desktop applications use a configured local Beads workspace. Browser PM remains a synthetic preview.
 
 - Fork: [Junyu06/bead-me-up-scotty](https://github.com/Junyu06/bead-me-up-scotty).
 - Upstream: [brendan-appstart/bead-me-up-scotty](https://github.com/brendan-appstart/bead-me-up-scotty).

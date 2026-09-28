@@ -12,10 +12,14 @@ export const stages = [
 ] as const;
 export type Stage = (typeof stages)[number];
 export type Role = "project" | "milestone" | "ticket";
-export type RequestKind = "review" | "decision" | "action";
+export type RequestKind = "review" | "decision" | "action" | "attention";
 export type DateOnly = string;
 export interface RecordItem {
   id: string;
+  version?: string;
+  nativeBlockers?: string[];
+  nativeBlocked?: boolean;
+  notes?: string;
   title: string;
   role: Role;
   status: string;
@@ -50,6 +54,8 @@ export interface RecordItem {
 }
 export interface Snapshot {
   workspace: string;
+  name?: string;
+  source?: "bd";
   complete: boolean;
   now: string;
   items: RecordItem[];
@@ -113,6 +119,7 @@ export function ancestry(item: RecordItem, index: Index): RecordItem[] {
 // UI-01 fixture rules only. UI-02 must use native ready/blocked results for
 // parent-child, gates, conditional-blocks and waits-for; do not generalize this.
 export function blockers(item: RecordItem, index: Index): string[] {
+  if (item.nativeBlockers !== undefined) return item.nativeBlockers;
   return item.dependencies
     .filter(
       (dep) =>
@@ -124,7 +131,9 @@ export function blockers(item: RecordItem, index: Index): string[] {
 export function isBlocked(item: RecordItem, index: Index): boolean {
   return (
     item.status !== "closed" &&
-    (item.status === "blocked" || blockers(item, index).length > 0)
+    (item.status === "blocked" ||
+      item.nativeBlocked === true ||
+      blockers(item, index).length > 0)
   );
 }
 export function stageOf(
@@ -171,6 +180,9 @@ export function progress(id: string, snapshot: Snapshot, index: Index) {
     ).length,
     decision: tickets.filter(
       (t) => t.status !== "closed" && t.request?.kind === "decision",
+    ).length,
+    attention: tickets.filter(
+      (t) => t.status !== "closed" && t.request?.kind === "attention",
     ).length,
     action: tickets.filter(
       (t) => t.status !== "closed" && t.request?.kind === "action",
@@ -398,4 +410,27 @@ export function assignees(items: RecordItem[], current?: string): string[] {
       ),
     ),
   ].sort((a, b) => a.localeCompare(b));
+}
+
+export function requestLabel(kind: RequestKind): string {
+  return {
+    review: "待验收",
+    decision: "待决策",
+    action: "待操作",
+    attention: "待处理",
+  }[kind];
+}
+
+export function dateOnly(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+export function shiftDate(date: string, days: number): string {
+  const d = localDate(date);
+  d.setDate(d.getDate() + days);
+  return dateOnly(d);
+}
+export function weekStart(now: string): string {
+  const d = new Date(now);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return dateOnly(d);
 }

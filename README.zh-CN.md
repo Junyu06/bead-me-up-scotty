@@ -8,10 +8,10 @@
 
 | 应用 | 源码 | 数据 | 启动 |
 |---|---|---|---|
-| Beads PM 预览 | [`pm-client/`](pm-client/README.zh-CN.md) | 合成数据；修改仅保留本次会话 | `npm --prefix pm-client run dev` |
+| Beads PM | [`pm-client/`](pm-client/README.zh-CN.md) | 桌面：本机 BD；浏览器：合成数据预览 | `npm --prefix pm-client run dev` |
 | Scotty | `app/`、`components/`、`lib/` | 已配置的本地 Beads 工作区，或 Scotty 示例数据 | `npm run dev` |
 
-Beads PM 已有 Projects、Board、Map、Need Me、统一详情和项目内 Timeline，支持新建、编辑、逐张验收、决策/操作答复及完成时间筛选。目前仍是交互预览，尚未接入真实 Beads 工作区。重新加载会恢复示例记录；显示偏好保存在本机。
+Beads PM 已有 Projects、Board、Map、Need Me、统一详情和项目内 Timeline，支持新建、编辑、逐张验收、决策/操作答复及完成时间筛选。桌面版已接入真实 BD，支持创建、保存、关闭和重新打开；浏览器版仍使用示例记录，刷新会重置修改。
 
 ## 运行 Beads PM
 
@@ -30,10 +30,10 @@ npm --prefix pm-client run dev
 要构建本地 macOS 应用，先安装 Rust/Cargo 和 Xcode 命令行工具，再执行：
 
 ```sh
-npm --prefix pm-client run desktop:build -- --debug
+npm --prefix pm-client run desktop:build
 ```
 
-应用输出到 `pm-client/src-tauri/target/debug/bundle/macos/Beads PM Preview.app`。应用内置前端，无需开发服务。当前为开发包，尚未完成发行签名和公证。
+应用输出到 `pm-client/src-tauri/target/release/bundle/macos/Beads PM.app`。应用内置前端，无需开发服务。首次打开需选择本机 BD 1.2.2 embedded 工作区；发行签名和公证尚未配置。
 
 ## 开发检查
 
@@ -43,7 +43,7 @@ npm --prefix pm-client run lint
 npm --prefix pm-client run build
 ```
 
-测试使用合成数据，不调用 `bd`。[验证与剩余工作](pm-client/docs/PROGRESS.md) 分别记录自动检查、浏览器检查和原生检查。真实数据接入仍是后续开发阶段。
+测试使用合成数据，不调用 `bd`。[验证与剩余工作](pm-client/docs/PROGRESS.md) 分别记录自动检查、浏览器检查和原生检查。额外的 Rust 集成测试在新建的临时 BD 工作区验证写入。
 
 ## 仓库结构
 
@@ -56,11 +56,11 @@ desktop/            Scotty 已有的 macOS 外壳
 docs/scotty.md      Scotty 的功能、安装与使用说明
 ```
 
-两个桌面应用使用独立的应用标识。Beads PM 复用部分工具函数和当前 Scotty 图标，不启动 Scotty 服务，也不接入其 BD 写入适配器。
+两个桌面应用使用独立的应用标识。Beads PM 复用部分工具函数，使用双层方块图标，通过 Rust 适配器调用 BD。
 
 ## Scotty 与 fork
 
-现有应用的用法见 [Scotty 使用说明](docs/scotty.md) 和 [桌面配置](desktop/README.md)。Scotty 配置后可操作真实本地 Beads 数据；PM 预览目前没有这项能力。
+现有应用的用法见 [Scotty 使用说明](docs/scotty.md) 和 [桌面配置](desktop/README.md)。两个桌面应用配置后均可使用真实本地 Beads 数据，浏览器 PM 仍为合成数据预览。
 
 - 当前 fork：[Junyu06/bead-me-up-scotty](https://github.com/Junyu06/bead-me-up-scotty)。
 - 上游：[brendan-appstart/bead-me-up-scotty](https://github.com/brendan-appstart/bead-me-up-scotty)。

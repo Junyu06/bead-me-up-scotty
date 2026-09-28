@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -14,6 +14,7 @@ import {
   Settings2,
   UserRound,
   X,
+  RefreshCw,
 } from "lucide-react";
 import {
   acceptExample,
@@ -24,7 +25,17 @@ import {
   makeIndex,
   type Filters,
   type RecordItem,
+  type Snapshot,
 } from "./domain";
+import {
+  readWorkspace,
+  readIssue,
+  projectIssue,
+  saveIssue,
+  createIssue,
+  issueAction,
+} from "./live";
+import { Empty } from "./ui";
 import { createFixture } from "./fixtures";
 import { Projects, ProjectOverview } from "./Projects";
 import { Board } from "./Board";
@@ -36,10 +47,14 @@ import { historyScope, projectScope } from "./navigation";
 import { useCompactHeader } from "./useCompactHeader";
 
 type View = "projects" | "overview" | "board" | "map" | "need" | "timeline";
-function restore(): { view: View; filters: Filters; projectSearch?: string } {
+function restore(snapshot: Snapshot): {
+  view: View;
+  filters: Filters;
+  projectSearch?: string;
+} {
   try {
     const p = JSON.parse(
-      localStorage.getItem("beads-pm:example-workspace-v1:view") ?? "null",
+      localStorage.getItem(`beads-pm:${snapshot.workspace}:view`) ?? "null",
     );
     if (
       p &&
@@ -52,7 +67,7 @@ function restore(): { view: View; filters: Filters; projectSearch?: string } {
         filters: {
           ...emptyFilters,
           ...p.filters,
-          owner: assignees(createFixture().items).includes(p.filters?.owner)
+          owner: assignees(snapshot.items).includes(p.filters?.owner)
             ? p.filters.owner
             : "all",
         },
@@ -63,9 +78,20 @@ function restore(): { view: View; filters: Filters; projectSearch?: string } {
   }
   return { view: "projects", filters: emptyFilters };
 }
-const initial = restore();
-export default function App() {
-  const [snapshot, setSnapshot] = useState(createFixture);
+export default function App({
+  initialSnapshot,
+  onSettings,
+}: {
+  initialSnapshot?: Snapshot;
+  onSettings?: () => void;
+}) {
+  const [snapshot, setSnapshot] = useState(
+    () => initialSnapshot ?? createFixture(),
+  );
+  const [initial] = useState(() => restore(snapshot));
+  const live = snapshot.source === "bd";
+  const [refreshing, setRefreshing] = useState(false);
+  const [connectionError, setConnectionError] = useState("");
   const [view, setView] = useState<View>(initial.view);
   const [boardWindow, setBoardWindow] = useState<"3d" | "all">("3d");
   const [filters, setFilters] = useState<Filters>(initial.filters);
@@ -75,6 +101,8 @@ export default function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [newIdea, setNewIdea] = useState(false);
   const [extraFilters, setExtraFilters] = useState(false);
+  const opening = useRef(0);
+  const actions = useRef(new Map<string, string>());
   const [notice, setNotice] = useState("");
   const {
     container: headerRef,
@@ -95,18 +123,48 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(
-        "beads-pm:example-workspace-v1:view",
+        `beads-pm:${snapshot.workspace}:view`,
         JSON.stringify({ view, filters, projectSearch }),
       );
     } catch {
       /* Preferences only. */
     }
-  }, [view, filters, projectSearch]);
+  }, [view, filters, projectSearch, snapshot.workspace]);
   useEffect(() => {
     if (!notice) return;
     const timeout = setTimeout(() => setNotice(""), 4000);
     return () => clearTimeout(timeout);
   }, [notice]);
+  useEffect(() => {
+    if (!live || selected || newIdea) return;
+    let stopped = false,
+      running = false;
+    const update = async () => {
+      if (running || document.visibilityState === "hidden") return;
+      running = true;
+      try {
+        const next = await readWorkspace();
+        if (!stopped) {
+          setSnapshot(next);
+          setConnectionError("");
+        }
+      } catch (e) {
+        if (!stopped) {
+          setConnectionError(String(e));
+          setSnapshot((s) => ({ ...s, complete: false, ready: new Set() }));
+        }
+      } finally {
+        running = false;
+      }
+    };
+    const timer = setInterval(() => void update(), 30000);
+    window.addEventListener("focus", update);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      window.removeEventListener("focus", update);
+    };
+  }, [live, selected, newIdea]);
   const setScope = (id: string) =>
     setFilters((f) => ({ ...f, project: id, milestone: "all" }));
   const goProject = (id: string) => {
@@ -121,23 +179,146 @@ export default function App() {
   const goView = (next: View) => {
     if (next === "board") setBoardWindow("3d");
     if ((next === "map" || next === "timeline") && !project)
-      setScope(projects[0].id);
+      setScope(projects[0]?.id ?? "all");
     setView(next);
   };
-  const saveItem = (next: RecordItem) => {
-    setSnapshot((s) => ({
-      ...s,
-      items: s.items.map((i) => (i.id === next.id ? next : i)),
-    }));
-    setNotice("工单已保存");
+  const refresh = async () => {
+    if (!live) return;
+    setRefreshing(true);
+    try {
+      let next = await readWorkspace();
+      if (selected && next.items.some((i) => i.id === selected)) {
+        const raw = await readIssue(selected);
+        next = {
+          ...next,
+          items: next.items.map((i) =>
+            i.id === selected
+              ? {
+                  ...projectIssue(raw, i.nativeBlockers),
+                  nativeBlocked: i.nativeBlocked,
+                }
+              : i,
+          ),
+        };
+      }
+      setSnapshot(next);
+      setConnectionError("");
+    } catch (e) {
+      setConnectionError(String(e));
+      setSnapshot((s) => ({ ...s, complete: false, ready: new Set() }));
+      throw e;
+    } finally {
+      setRefreshing(false);
+    }
   };
-  const createIdea = (title: string, description: string) => {
-    const next = createIdeaExample(snapshot, title, description);
-    if (next === snapshot) return;
-    setSnapshot(next);
+  const refreshAfterWrite = async () => {
+    try {
+      await refresh();
+    } catch (e) {
+      throw new Error(
+        `修改已写入 BD，但列表刷新失败。请刷新核对。${String(e)}`,
+      );
+    }
+  };
+  const openItem = async (id: string) => {
+    if (!live) {
+      setSelected(id);
+      return;
+    }
+    const generation = ++opening.current;
+    try {
+      const raw = await readIssue(id);
+      if (generation !== opening.current) return;
+      setSnapshot((s) => ({
+        ...s,
+        items: s.items.map((i) =>
+          i.id === id
+            ? {
+                ...projectIssue(raw, i.nativeBlockers),
+                nativeBlocked: i.nativeBlocked,
+              }
+            : i,
+        ),
+      }));
+      setSelected(id);
+    } catch (e) {
+      setConnectionError(String(e));
+      setSnapshot((s) => ({ ...s, complete: false, ready: new Set() }));
+    }
+  };
+  const saveItem = async (next: RecordItem) => {
+    if (live && !snapshot.complete)
+      throw new Error("工作区尚未完整载入，请先刷新。");
+    if (live) {
+      await saveIssue(
+        { ...index.byId.get(next.id)!, version: next.version },
+        next,
+      );
+      await refreshAfterWrite();
+    } else
+      setSnapshot((s) => ({
+        ...s,
+        items: s.items.map((i) => (i.id === next.id ? next : i)),
+      }));
+    setNotice(live ? "已保存" : "已更新示例");
+  };
+  const createIdea = async (
+    title: string,
+    description: string,
+    operation: string,
+  ) => {
+    if (live && !snapshot.complete)
+      throw new Error("工作区尚未完整载入，请先刷新。");
+    if (live) {
+      const created = await createIssue(title, description, operation);
+      await refreshAfterWrite();
+      await openItem(created.id);
+    } else {
+      const next = createIdeaExample(snapshot, title, description);
+      if (next === snapshot) return;
+      setSnapshot(next);
+      setSelected(next.items.at(-1)!.id);
+    }
     setNewIdea(false);
-    setSelected(next.items.at(-1)!.id);
     setNotice("工单已创建");
+  };
+  const act = async (
+    id: string,
+    kind: "respond" | "request_changes" | "close" | "reopen",
+    body = "",
+  ) => {
+    if (live) {
+      if (!snapshot.complete) throw new Error("工作区尚未完整载入，请先刷新。");
+      const key = JSON.stringify([id, kind, body]);
+      const operation = actions.current.get(key) ?? crypto.randomUUID();
+      actions.current.set(key, operation);
+      await issueAction(index.byId.get(id)!, kind, body, operation);
+      await refreshAfterWrite();
+      actions.current.delete(key);
+    } else if (kind === "close") setSnapshot((s) => acceptExample(s, id));
+    else if (kind === "respond")
+      setSnapshot((s) => respondExample(s, id, body));
+    else
+      setSnapshot((s) => ({
+        ...s,
+        items: s.items.map((i) =>
+          i.id === id
+            ? {
+                ...i,
+                status: "in_progress",
+                request: undefined,
+                description: `${i.description}\n\n## 本轮修改意见\n\n${body}`,
+              }
+            : i,
+        ),
+      }));
+    setNotice(
+      kind === "close"
+        ? "工单已关闭"
+        : kind === "reopen"
+          ? "工单已重新打开"
+          : "已提交",
+    );
   };
   const activeCount = ["milestone", "owner", "priority", "label"].filter(
     (k) => filters[k as keyof Filters] !== "all",
@@ -158,11 +339,15 @@ export default function App() {
           <strong>Beads</strong>
           <span>PM</span>
         </div>
-        <button className="new-idea-button" onClick={() => setNewIdea(true)}>
+        <button
+          className="new-idea-button"
+          disabled={live && !snapshot.complete}
+          onClick={() => setNewIdea(true)}
+        >
           <Plus size={18} />
           新建工单
         </button>
-        <div className="sidebar-label">工作空间</div>
+        <div className="sidebar-label">工作区</div>
         <nav aria-label="主导航">
           {(
             [
@@ -227,7 +412,7 @@ export default function App() {
                 setView("projects");
               }}
             >
-              工作空间
+              工作区
             </button>
             <ChevronRight size={13} />
             {project && view !== "projects" && (
@@ -265,16 +450,54 @@ export default function App() {
                 )}
               </button>
             )}
-            <span className="demo-badge">示例工作区 · 修改仅保留本次会话</span>
+            {live ? (
+              <>
+                <button
+                  className="icon-button"
+                  aria-label="刷新工作区"
+                  title="刷新"
+                  disabled={refreshing || !!selected || newIdea}
+                  onClick={() => void refresh().catch(() => {})}
+                >
+                  <RefreshCw size={16} />
+                </button>
+                <button
+                  className="text-button"
+                  onClick={onSettings}
+                  title="工作区设置"
+                >
+                  {snapshot.name}
+                </button>
+              </>
+            ) : (
+              <span className="demo-badge">示例 · 关闭后重置</span>
+            )}
             <button
               className="icon-button"
               aria-label="新建工单"
+              disabled={live && !snapshot.complete}
               onClick={() => setNewIdea(true)}
             >
               <Plus size={19} />
             </button>
           </div>
         </header>
+        {live && !snapshot.complete && !connectionError && (
+          <p role="alert" className="connection-error">
+            工作区缺少部分父项或依赖，暂时不能修改。
+          </p>
+        )}
+        {connectionError && (
+          <div role="alert" className="connection-error">
+            {connectionError}
+            <button
+              className="text-button"
+              onClick={() => void refresh().catch(() => {})}
+            >
+              重试
+            </button>
+          </div>
+        )}
         {view !== "projects" && view !== "need" && (
           <div className="view-heading">
             <div
@@ -302,7 +525,7 @@ export default function App() {
                     <button
                       className="icon-button"
                       aria-label="查看项目详情"
-                      onClick={() => setSelected(project.id)}
+                      onClick={() => void openItem(project.id)}
                     >
                       <ArrowUpRight size={17} />
                     </button>
@@ -414,7 +637,13 @@ export default function App() {
                 </>
               )}
               <span className="filter-spacer" />
-              <span className="snapshot-date">9 月 25 日，星期五</span>
+              <span className="snapshot-date">
+                {new Date(snapshot.now).toLocaleDateString("zh-CN", {
+                  month: "long",
+                  day: "numeric",
+                  weekday: "long",
+                })}
+              </span>
             </div>
             {extraFilters && view !== "projects" && (
               <div className="extra-filters">
@@ -508,17 +737,17 @@ export default function App() {
               snapshot={snapshot}
               index={index}
               onProject={goProject}
-              onOpen={setSelected}
+              onOpen={(id) => void openItem(id)}
               search={projectSearch}
             />
-          ) : view === "overview" ? (
+          ) : view === "overview" && effectiveProject ? (
             <ProjectOverview
               key={effectiveProject.id}
               project={effectiveProject}
               snapshot={snapshot}
               index={index}
               filters={filters}
-              onOpen={setSelected}
+              onOpen={(id) => void openItem(id)}
               onView={goView}
               onHistory={() => openHistory()}
             />
@@ -528,16 +757,16 @@ export default function App() {
               snapshot={snapshot}
               index={index}
               filters={filters}
-              onOpen={setSelected}
+              onOpen={(id) => void openItem(id)}
             />
-          ) : view === "map" ? (
+          ) : view === "map" && effectiveProject ? (
             <MapView
               key={effectiveProject.id}
               project={effectiveProject}
               snapshot={snapshot}
               index={index}
               filters={filters}
-              onOpen={setSelected}
+              onOpen={(id) => void openItem(id)}
               onHistory={openHistory}
             />
           ) : view === "need" ? (
@@ -545,8 +774,10 @@ export default function App() {
               snapshot={snapshot}
               index={index}
               filters={filters}
-              onOpen={setSelected}
+              onOpen={(id) => void openItem(id)}
             />
+          ) : !effectiveProject ? (
+            <Empty title="暂无项目" />
           ) : (
             <Timeline
               key={effectiveProject.id}
@@ -554,7 +785,7 @@ export default function App() {
               snapshot={snapshot}
               index={index}
               filters={filters}
-              onOpen={setSelected}
+              onOpen={(id) => void openItem(id)}
             />
           )}
         </div>
@@ -566,32 +797,12 @@ export default function App() {
           index={index}
           snapshot={snapshot}
           onClose={() => setSelected(null)}
-          onOpen={setSelected}
+          onOpen={(id) => void openItem(id)}
           onSave={saveItem}
-          onAccept={(id) => {
-            setSnapshot((s) => acceptExample(s, id));
-            setNotice(`${id} 已关闭`);
-          }}
-          onRespond={(id, body) => {
-            setSnapshot((s) => respondExample(s, id, body));
-            setNotice("答复已提交");
-          }}
-          onRequestChanges={(id, reason) => {
-            setSnapshot((s) => ({
-              ...s,
-              items: s.items.map((i) =>
-                i.id === id
-                  ? {
-                      ...i,
-                      status: "in_progress",
-                      request: undefined,
-                      description: `${i.description}\n\n## 本轮修改意见\n\n${reason}`,
-                    }
-                  : i,
-              ),
-            }));
-            setNotice("修改意见已提交");
-          }}
+          onAccept={(id) => act(id, "close")}
+          onRespond={(id, body) => act(id, "respond", body)}
+          onRequestChanges={(id, body) => act(id, "request_changes", body)}
+          onReopen={live ? (id) => act(id, "reopen") : undefined}
         />
       )}
       {newIdea && (

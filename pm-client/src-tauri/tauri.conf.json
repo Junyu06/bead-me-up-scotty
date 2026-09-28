@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Beads PM Preview",
+  "productName": "Beads PM",
   "version": "0.1.0",
-  "identifier": "com.beads.pm.preview",
+  "identifier": "com.beads.pm",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://127.0.0.1:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Beads PM · 示例预览",
+        "title": "Beads PM",
         "width": 1440,
         "height": 900,
         "minWidth": 1000,
@@ -31,7 +31,11 @@
       "app"
     ],
     "icon": [
-      "icons/icon.png"
-    ]
+      "icons/128x128.png",
+      "icons/icon.icns"
+    ],
+    "macOS": {
+      "signingIdentity": "-"
+    }
   }
 }

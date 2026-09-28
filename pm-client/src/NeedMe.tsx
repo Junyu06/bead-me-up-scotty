@@ -19,6 +19,7 @@ import { Empty, TicketPath } from "./ui";
 const kinds = {
   review: { title: "待验收", icon: CheckCheck },
   decision: { title: "待决策", icon: MessageCircle },
+  attention: { title: "待处理", icon: MessageCircle },
   action: { title: "待操作", icon: MousePointer2 },
 };
 export function NeedMe({
@@ -119,9 +120,7 @@ export function NeedMe({
           </button>
         );
       })}
-      {!shown.length && (
-        <Empty title="暂无待处理事项">当前筛选下没有匹配的请求。</Empty>
-      )}
+      {!shown.length && <Empty title="当前筛选下没有待处理事项" />}
     </div>
   );
 }

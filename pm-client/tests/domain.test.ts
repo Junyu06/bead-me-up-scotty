@@ -531,3 +531,78 @@ test("assignee choices follow workspace data and preserve an edited owner", () =
   ]);
   assert.deepEqual(assignees([]), []);
 });
+
+test("real BD mapping uses native blocking and keeps an unclassified human request distinct from review", async () => {
+  const { projectSnapshot, changedFields, projectIssue } = await import(
+    "../src/live"
+  );
+  const root = {
+    id: "test-project",
+    title: "Project",
+    issue_type: "epic",
+    status: "open",
+    priority: 2,
+    updated_at: "same-second",
+  };
+  const ticket = {
+    ...root,
+    id: "test-1",
+    title: "Work",
+    issue_type: "task",
+    parent: root.id,
+    labels: ["human"],
+    metadata: { unrelated: { keep: true } },
+    dependencies: [{ depends_on_id: "test-2", type: "conditional-blocks" }],
+  };
+  const dependency = {
+    ...ticket,
+    id: "test-2",
+    title: "Gate",
+    labels: [],
+    dependencies: [],
+  };
+  const snapshot = projectSnapshot({
+    workspace: "synthetic",
+    name: "Test",
+    now: DEMO_NOW,
+    items: [root, ticket, dependency],
+    ready: [],
+    blocked: [{ id: ticket.id, blocked_by: [dependency.id] }],
+  });
+  const item = snapshot.items.find((i) => i.id === ticket.id)!;
+  const idx = makeIndex(snapshot.items);
+  assert.equal(item.request?.kind, "attention");
+  assert.equal(stageOf(item, snapshot, idx), "Blocked");
+  assert.deepEqual(blockers(item, idx), [dependency.id]);
+  assert.deepEqual(changedFields(item, { ...item, title: "New" }), {
+    title: "New",
+  });
+  const withPlan = {
+    ...item,
+    plan: { start: "2026-09-27", end: "2026-09-28" },
+  };
+  assert.deepEqual(changedFields(withPlan, item), { plan: null });
+  assert.equal(
+    projectIssue({ ...ticket, _pm_version: "content-digest" }).version,
+    "content-digest",
+  );
+  assert.equal(
+    projectIssue({ ...ticket, labels: ["human", "pm:review"] }).request?.kind,
+    "review",
+  );
+  assert.equal(
+    projectIssue({ ...ticket, labels: ["pm:review", "pm:decision"] }).request
+      ?.kind,
+    "attention",
+  );
+  assert.throws(() =>
+    projectSnapshot({
+      workspace: "test",
+      name: "Test",
+      now: DEMO_NOW,
+      items: [],
+      ready: [{ id: "missing" }],
+      blocked: [],
+    }),
+  );
+});

@@ -25,6 +25,7 @@ import {
 import {
   stageOf,
   matches,
+  descendants,
   progress,
   type Index,
   type Filters,
@@ -141,7 +142,7 @@ export function MapView({
 }) {
   const key = `beads-pm:${snapshot.workspace}:${project.id}:map`;
   const [collapsed, setCollapsed] = useState<Set<string>>(
-    () => new Set(readPreference<string[]>(`${key}:collapsed`, ["demo-later"])),
+    () => new Set(readPreference<string[]>(`${key}:collapsed`, [])),
   );
   const [positions, setPositions] = useState<PositionMap>(() =>
     readPreference(
@@ -177,7 +178,6 @@ export function MapView({
   const nodes: Node[] = groups.map((group, i) => {
     const count = progress(group.id, snapshot, index);
     const closed = collapsed.has(group.id);
-    const children = shown.filter((t) => t.parent === group.id);
     return {
       id: group.id,
       type: "milestone",
@@ -203,7 +203,12 @@ export function MapView({
         toggle: () => toggle(group.id),
         count: count.total,
         closed: count.closed,
-        hidden: count.total - count.closed - children.length,
+        hidden: descendants(group.id, index).filter(
+          (item) =>
+            item.role === "ticket" &&
+            item.status !== "closed" &&
+            !matches(item, filters, index),
+        ).length,
         history: () => onHistory(group.id),
       },
     };
@@ -276,8 +281,7 @@ export function MapView({
       <div className="map-toolbar">
         <span>
           <Flag size={14} />
-          框表示归属 <span className="legend-arrow">→</span>{" "}
-          箭头表示未解除的依赖
+          归属 <span className="legend-arrow">→</span> 未解除的依赖
         </span>
         <button
           className="quiet-button"
@@ -311,6 +315,10 @@ export function MapView({
         }}
         nodesConnectable={false}
         deleteKeyCode={null}
+        ariaLabelConfig={{
+          "edge.a11yDescription.default":
+            "按 Enter 或空格选择依赖，按 Escape 取消。",
+        }}
         minZoom={0.4}
         maxZoom={1.5}
         panOnScroll
@@ -343,9 +351,6 @@ export function MapView({
             ))}
         </div>
       )}
-      <p className="map-footer">
-        拖动调整本地布局 · 触控板平移，双指缩放 · 状态更新保留视角
-      </p>
     </div>
   );
 }

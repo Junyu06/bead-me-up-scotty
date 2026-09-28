@@ -3,6 +3,9 @@ import { ChevronDown, ChevronRight, Diamond, Flag } from "lucide-react";
 import {
   descendants,
   dayOffset,
+  weekStart,
+  shiftDate,
+  dateOnly,
   dateLabel,
   matches,
   timelineOrder,
@@ -14,6 +17,7 @@ import {
 import { Empty } from "./ui";
 export function Timeline({
   project,
+  snapshot,
   index,
   filters,
   onOpen,
@@ -25,8 +29,15 @@ export function Timeline({
   onOpen: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(
-    new Set(["demo-content", "demo-delivery"]),
+    new Set(
+      (index.children.get(project.id) ?? [])
+        .filter((i) => i.role === "milestone")
+        .map((i) => i.id),
+    ),
   );
+  const [origin, setOrigin] = useState(() => weekStart(snapshot.now));
+  const today = dayOffset(dateOnly(new Date(snapshot.now)), origin);
+  const offset = (value: string) => dayOffset(value, origin);
   const scope = descendants(project.id, index).filter(
     (i) => i.status !== "closed" && matches(i, filters, index),
   );
@@ -41,7 +52,31 @@ export function Timeline({
   return (
     <div className="timeline-page">
       <div className="timeline-caption">
-        <span>9 月 21 日 — 10 月 6 日, 2026</span>
+        <div className="timeline-navigation">
+          <button
+            className="icon-button"
+            aria-label="上一段日期"
+            onClick={() => setOrigin(shiftDate(origin, -14))}
+          >
+            <ChevronRight size={14} style={{ transform: "rotate(180deg)" }} />
+          </button>
+          <span>
+            {origin} — {shiftDate(origin, 15)}
+          </span>
+          <button
+            className="icon-button"
+            aria-label="下一段日期"
+            onClick={() => setOrigin(shiftDate(origin, 14))}
+          >
+            <ChevronRight size={14} />
+          </button>
+          <button
+            className="text-button"
+            onClick={() => setOrigin(weekStart(snapshot.now))}
+          >
+            今天
+          </button>
+        </div>
         <div className="timeline-legend">
           <span>
             <i className="legend-plan" />
@@ -55,7 +90,6 @@ export function Timeline({
             <i className="legend-forecast" />
             预计区间
           </span>
-          <span className="subtle">实际事件：详情中查看</span>
         </div>
       </div>
       <div className="timeline-scroll">
@@ -64,14 +98,8 @@ export function Timeline({
             <span>项目 / 里程碑 / 工单</span>
             <div>
               {days.map((i) => (
-                <span key={i} className={i === 4 ? "today" : ""}>
-                  {i === 0
-                    ? "9/21"
-                    : i === 10
-                      ? "10/1"
-                      : i < 10
-                        ? 21 + i
-                        : i - 9}
+                <span key={i} className={i === today ? "today" : ""}>
+                  {dateLabel(shiftDate(origin, i))}
                 </span>
               ))}
             </div>
@@ -113,7 +141,7 @@ export function Timeline({
                 <div className="timeline-lane">
                   {days.map((i) => (
                     <span
-                      className={`day-grid ${i === 4 ? "today" : ""}`}
+                      className={`day-grid ${i === today ? "today" : ""}`}
                       key={i}
                     />
                   ))}
@@ -121,8 +149,8 @@ export function Timeline({
                     <button
                       className={`plan-bar ${item.role}`}
                       style={{
-                        left: `${(dayOffset(item.plan.start) / 16) * 100}%`,
-                        width: `${((dayOffset(item.plan.end) - dayOffset(item.plan.start) + 1) / 16) * 100}%`,
+                        left: `${(offset(item.plan.start) / 16) * 100}%`,
+                        width: `${((offset(item.plan.end) - offset(item.plan.start) + 1) / 16) * 100}%`,
                       }}
                       onClick={() => onOpen(item.id)}
                       aria-label={`${item.title} 计划 ${item.plan.start} 到 ${item.plan.end}`}
@@ -137,8 +165,8 @@ export function Timeline({
                     <button
                       className="forecast-bar"
                       style={{
-                        left: `${(dayOffset(item.forecast.start) / 16) * 100}%`,
-                        width: `${((dayOffset(item.forecast.end) - dayOffset(item.forecast.start) + 1) / 16) * 100}%`,
+                        left: `${(offset(item.forecast.start) / 16) * 100}%`,
+                        width: `${((offset(item.forecast.end) - offset(item.forecast.start) + 1) / 16) * 100}%`,
                       }}
                       onClick={() => onOpen(item.id)}
                       aria-label={`${item.title} 预计区间`}
@@ -148,7 +176,7 @@ export function Timeline({
                     <button
                       className="deadline"
                       style={{
-                        left: `${((dayOffset(item.due) + 0.5) / 16) * 100}%`,
+                        left: `${((offset(item.due) + 0.5) / 16) * 100}%`,
                       }}
                       aria-label={`${item.title} 目标 ${item.due}`}
                       title={`目标：${dateLabel(item.due)}`}
@@ -176,13 +204,8 @@ export function Timeline({
             <span>安排日期 →</span>
           </button>
         ))}
-        {!unscheduled.length && (
-          <p className="subtle">当前范围内的工单均已安排日期。</p>
-        )}
       </div>
-      {rows.length === 1 && !project.plan && !project.due && (
-        <Empty title="还没有排期">可以在详情中填写目标日期与人工计划。</Empty>
-      )}
+      {rows.length === 0 && !unscheduled.length && <Empty title="暂无排期" />}
     </div>
   );
 }

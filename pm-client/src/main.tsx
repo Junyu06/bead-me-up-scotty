@@ -1,6 +1,6 @@
 import React, { Component, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import App from "./App";
+import Workspace from "./Workspace";
 import "./styles.css";
 
 class ErrorBoundary extends Component<
@@ -14,9 +14,9 @@ class ErrorBoundary extends Component<
   render() {
     return this.state.error ? (
       <div className="app-error">
-        <h1>这个页面暂时没有打开</h1>
-        <p>示例界面遇到了错误。刷新会重置本次示例修改；真实 BD 未连接。</p>
-        <button onClick={() => location.reload()}>重新打开示例</button>
+        <h1>页面出错</h1>
+        <p>重新加载会丢失未保存的修改。</p>
+        <button onClick={() => location.reload()}>重新加载</button>
       </div>
     ) : (
       this.props.children
@@ -26,7 +26,7 @@ class ErrorBoundary extends Component<
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <Workspace />
     </ErrorBoundary>
   </React.StrictMode>,
 );

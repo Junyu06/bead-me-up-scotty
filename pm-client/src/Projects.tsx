@@ -11,6 +11,7 @@ import {
   dateLabel,
   progress,
   stageOf,
+  requestLabel,
   matches,
   type Snapshot,
   type Index,
@@ -73,13 +74,7 @@ export function Projects({
                 </span>
                 <span>
                   <strong>{project.title}</strong>
-                  <small>
-                    {project.status === "idea"
-                      ? "Idea"
-                      : project.id === "demo-atlas"
-                        ? "结构与内容 → 联调与交付"
-                        : "直接管理工单"}
-                  </small>
+                  {project.status === "idea" && <small>Idea</small>}
                 </span>
               </span>
               <ProgressLine id={project.id} snapshot={snapshot} index={index} />
@@ -90,9 +85,12 @@ export function Projects({
                 {p.blocked > 0 && <span>{p.blocked} 受阻</span>}
                 {p.decision > 0 && <span>{p.decision} 待决策</span>}
                 {p.action > 0 && <span>{p.action} 待操作</span>}
-                {!p.review && !p.blocked && !p.decision && !p.action && (
-                  <span className="subtle">—</span>
-                )}
+                {p.attention > 0 && <span>{p.attention} 待处理</span>}
+                {!p.review &&
+                  !p.blocked &&
+                  !p.decision &&
+                  !p.action &&
+                  !p.attention && <span className="subtle">—</span>}
               </span>
               <span>{dateLabel(project.due)}</span>
               <ArrowUpRight size={16} />
@@ -100,7 +98,7 @@ export function Projects({
           );
         })}
         {!projects.length && (
-          <Empty title="没有匹配的项目">换个关键词试试。</Empty>
+          <Empty title={search ? "没有匹配的项目" : "暂无项目"} />
         )}
       </div>
       <div className="section-heading next-section">
@@ -121,11 +119,7 @@ export function Projects({
               <small>{item.request?.reason}</small>
             </span>
             <span className="request-kind">
-              {item.request?.kind === "review"
-                ? "待验收"
-                : item.request?.kind === "decision"
-                  ? "待决策"
-                  : "待操作"}
+              {item.request && requestLabel(item.request.kind)}
             </span>
             <ArrowRight size={16} />
           </button>
@@ -153,7 +147,12 @@ export function ProjectOverview({
   filters: Filters;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(
-    new Set(["demo-content"]),
+    new Set(
+      (index.children.get(project.id) ?? [])
+        .filter((i) => i.role === "milestone")
+        .slice(0, 1)
+        .map((i) => i.id),
+    ),
   );
   const p = progress(project.id, snapshot, index);
   const children = index.children.get(project.id) ?? [];
@@ -181,11 +180,12 @@ export function ProjectOverview({
         <div>
           <span className="eyebrow">需要关注</span>
           <strong>
-            {p.review + p.decision + p.action}
+            {p.review + p.decision + p.action + p.attention}
             <span> 待处理</span>
           </strong>
           <small>
             {p.review} 待验收 · {p.decision} 待决策 · {p.action} 待操作
+            {p.attention > 0 && ` · ${p.attention} 待处理`}
           </small>
           <small>{p.blocked} 项受阻</small>
         </div>
@@ -195,7 +195,7 @@ export function ProjectOverview({
           <small>
             {project.forecast
               ? `预计 ${dateLabel(project.forecast.start)} — ${dateLabel(project.forecast.end)}`
-              : "预计完成时间尚未填写"}
+              : "预计完成：未知"}
           </small>
         </div>
       </div>
@@ -205,7 +205,7 @@ export function ProjectOverview({
           在 Map 中查看 <ArrowUpRight size={14} />
         </button>
       </div>
-      {!children.length && <Empty title="尚未拆分">暂无里程碑或工单。</Empty>}
+      {!children.length && <Empty title="暂无里程碑或工单" />}
       {groups
         .filter(
           (g) => filters.milestone === "all" || g.id === filters.milestone,

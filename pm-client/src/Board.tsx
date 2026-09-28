@@ -2,10 +2,13 @@ import { useState } from "react";
 import { ArrowRight, Link2, SlidersHorizontal } from "lucide-react";
 import {
   blockers,
+  dateOnly,
+  shiftDate,
   isBlocked,
   inDoneWindow,
   matches,
   stageOf,
+  requestLabel,
   stages,
   type DoneWindow,
   type Filters,
@@ -31,8 +34,8 @@ export function Board({
   const [limit, setLimit] = useState(20);
   const [role, setRole] = useState("ticket");
   const [custom, setCustom] = useState({
-    start: "2026-09-23",
-    end: "2026-09-25",
+    start: shiftDate(dateOnly(new Date(snapshot.now)), -2),
+    end: dateOnly(new Date(snapshot.now)),
   });
   const items = snapshot.items.filter(
     (i) => i.role === role && matches(i, filters, index),
@@ -103,7 +106,7 @@ export function Board({
             </>
           )}
         </span>
-        <small>当前范围共 {items.length} 项</small>
+        <small>{items.length} 项</small>
       </div>
       {window === "custom" && custom.start > custom.end && (
         <p className="warning">起始日期不能晚于结束日期。</p>
@@ -152,11 +155,7 @@ export function Board({
                     )}
                     {item.request && (
                       <span className="review-line">
-                        {item.request.kind === "review"
-                          ? "待验收"
-                          : item.request.kind === "decision"
-                            ? "待决策"
-                            : "待操作"}
+                        {item.request && requestLabel(item.request.kind)}
                       </span>
                     )}
                     <span className="card-footer">

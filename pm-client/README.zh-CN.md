@@ -1,69 +1,61 @@
-# Beads PM 预览
+# Beads PM
 
 [English](README.md) | 简体中文
 
-这是在 [Scotty fork](../README.zh-CN.md) 内开发的 Mac 项目管理客户端。目前是 **UI-01 交互预览**，使用合成数据和固定时钟，不连接、写入或启动真实 Beads 工作区的进程。
+基于 [Scotty fork](../README.zh-CN.md) 开发的 Mac 客户端。Projects、Board、Map、Need Me 和 Timeline 共用同一份 BD 数据。桌面版通过本机 `bd` 读写工作区；浏览器版使用可重置的示例数据。
 
-## 启动
+## 构建与打开
 
-需要 Node.js 22.12 或更高版本及 npm。在仓库根目录执行：
+需要 Node.js 22.12+、npm、Rust/Cargo 和 Xcode 命令行工具。已验证的数据后端为 BD 1.2.2 的本机 embedded Dolt 工作区。
+
+在仓库根目录运行：
 
 ```sh
 npm ci
 npm --prefix pm-client ci
+npm --prefix pm-client run desktop:build
+```
+
+打开 `pm-client/src-tauri/target/release/bundle/macos/Beads PM.app`，填写包含 `.beads` 的工作区路径。应用会查找常用位置的 BD；其他位置或操作者名称可在“BD 设置”中填写。配置保存在系统的用户应用配置目录，不进入源码或安装包。
+
+应用内置前端，使用独立标识 `com.beads.pm` 和侧栏的双层方块图标。本机构建使用 ad-hoc 签名，未配置 Developer ID 发行签名和公证。
+
+## 使用
+
+- 新建工单默认为独立 Idea。在详情中可修改标题、描述、负责人、优先级、状态、归属、目标日期和人工计划。
+- Board 提供完成时间范围与通用筛选；项目进度包含历史工单。
+- Need Me 将仅带 `human` 的工单显示为“待处理”。明确的 `pm:review`、`pm:decision`、`pm:action` 标签分别表示待验收、待决策和待操作；负责人或 `human` 标签本身不等于待验收。
+- 答复追加到 BD notes，并移除已答复的请求标签。要求修改会将待验收工单退回 `in_progress`，保留负责人。关闭和重新打开需要确认具体工单；会连带自动关闭父项的流程不在此版本内操作。
+- Timeline 区分目标日期和人工计划，可以切换日期范围。Map 布局、视图筛选是本机偏好；拖动节点不会改变归属。
+- 没有打开详情或新建表单时，每 30 秒及窗口重新获得焦点时刷新。刷新失败会保留上次内容并暂停修改，不会换成示例数据。打开详情会重读；保存前核对内容版本，保存后读回结果。
+
+应用没有内置 AI 聊天或自动归类。当前版本不支持重定向、远程数据库和跨工作区路由。BD CLI 没有条件写入事务，其他进程仍可能在最后一次检查与写入之间修改工单；部分写入或结果不确定时会提示核对。协议和恢复边界见 [BD_CONTRACT.md](docs/BD_CONTRACT.md)。
+
+## 浏览器预览与检查
+
+```sh
 npm --prefix pm-client run dev
 ```
 
-打开 [http://127.0.0.1:1420](http://127.0.0.1:1420)。预览使用 React、TypeScript 和 Vite。安装根目录依赖是为了引用 Scotty 的共享 schema 与清单工具函数，不会启动 Scotty 的 Next.js 服务。
-
-要构建 Mac 应用，先安装 Rust/Cargo 和 Xcode 命令行工具，然后在仓库根目录执行：
-
-```sh
-npm --prefix pm-client run desktop:build -- --debug
-```
-
-打开 `pm-client/src-tauri/target/debug/bundle/macos/Beads PM Preview.app`。应用内置前端，无需开发服务。当前为本地开发包，尚未完成发行签名和公证。它有独立的应用标识，不替换已安装的 Scotty；图标暂时复用 Scotty。
-
-## 检查
-
-在仓库根目录执行：
+打开 [http://127.0.0.1:1420](http://127.0.0.1:1420)。浏览器仍是示例预览，关闭或刷新会重置修改；桌面版进入真实工作区配置，连接失败不会退回示例。
 
 ```sh
 npm --prefix pm-client test
-npm --prefix pm-client run build
 npm --prefix pm-client run lint
+npm --prefix pm-client run build
+cargo test --manifest-path pm-client/src-tauri/Cargo.toml
 ```
 
-测试先用 esbuild 打包共享 TypeScript 边界，再通过 Node 测试运行器执行，不调用 `bd`。[PROGRESS.md](docs/PROGRESS.md) 分别记录自动检查、浏览器检查和 Mac 原生检查。
-
-## 预览操作
-
-- Projects：打开项目、展开里程碑，或查看直接包含工单的项目。
-- Board：按范围、负责人、优先级或标签筛选；选择完成时间范围（5 小时、1 天、默认 3 天、7 天、全部或自定义日期），每次可再显示 20 项。
-- Map：展开或收起容器、查看跨里程碑依赖、平移或缩放，也可从外框拖动节点；点击工单打开统一详情。
-- Need Me：查看待验收、待决策、待操作请求；提交决定或操作答复后，可以在详情回看原请求和答复。答复不会关闭工单或解除阻塞。
-- 项目 Timeline：点击计划条或截止日期，在统一详情中修改日期。
-- 验收：打开 `demo-a`，查看交付依据并确认通过这一张示例工单；`demo-b` 变为 Ready，`demo-e` 继续受 `demo-c` 阻塞。
-- 新建：初始为 Idea，项目未分配；从项目内创建也一样。未提交的新建、编辑和答复草稿有离开确认。
-
-创建、编辑和验收只影响内存中的示例；重新加载会恢复记录，筛选和 Map 显示偏好保存在本机。每次只验收一张工单，不自动关闭父项目或启动 agent。应用没有内置 AI 聊天或自动归类。
-
-## 当前限制
-
-真实 Beads 读写、原生 readiness、持久保存和真实关闭/重开尚未接入。示例中的可执行状态计算不能直接用于真实 BD。剩余界面问题和验证范围见 [PROGRESS.md](docs/PROGRESS.md)。
-
-其他资料：[设计](docs/DESIGN.md)、[BD 接入边界](docs/BD_CONTRACT.md)、[本地环境核验](docs/LOCAL_FACTS.md)、[产品计划](docs/PLAN.md)。源码及复用资源遵循仓库的 [MIT 许可证](../LICENSE)。
-
-## 顶部收起
-
-项目概览、Board、Map、Timeline 默认展开标题和筛选区。向下滚动时收起，向上滚动或点击“展开”恢复。项目标签始终可见；有生效中的筛选时，展开按钮旁显示筛选数量。Need Me 使用同样的筛选收起方式。Board 各列名称在滚动时保持可见。
-
-横向滚动和 Map 双指缩放不会触发收起。搜索框、选择框保持焦点时会继续显示；支持键盘操作及系统减少动态效果设置。
-
-启动 `npm run dev` 后，在另一个终端的 `pm-client/` 目录检查交互：
+预览运行后，在 `pm-client/` 中执行：
 
 ```sh
 PM_TEST_URL=http://127.0.0.1:1420 npm run test:ui
+PM_BROWSER=webkit PM_TEST_URL=http://127.0.0.1:1420 npm run test:ui
+cargo test --manifest-path src-tauri/Cargo.toml -- --include-ignored --nocapture
 ```
 
-浏览器测试使用根目录依赖中的 Playwright。首次使用时，在仓库根目录执行 `npx playwright install chromium` 安装测试浏览器。已安装 WebKit 时，可加 `PM_BROWSER=webkit` 检查该引擎。
+浏览器通过根目录的 `npx playwright install chromium webkit` 安装。浏览器测试使用示例或模拟的 IPC；最后一条 Rust 测试会新建临时 Git/BD 工作区，再验证真实 CLI 写入，不接收正式工作区参数。
+
+[设计](docs/DESIGN.md) · [接入协议](docs/BD_CONTRACT.md) · [验证](docs/PROGRESS.md) · [计划](docs/PLAN.md)
+
+应用源码遵循仓库的 [MIT 许可证](../LICENSE)；Layers2 图标遵循 [Lucide ISC 许可证](src-tauri/icons/LICENSE.txt)。

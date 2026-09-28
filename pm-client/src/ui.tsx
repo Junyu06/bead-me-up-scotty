@@ -10,7 +10,7 @@ import {
   Lightbulb,
 } from "lucide-react";
 import type { Stage, RecordItem, Index, Snapshot } from "./domain";
-import { ancestry, stageOf, progress, isBlocked } from "./domain";
+import { ancestry, stageOf, progress, isBlocked, requestLabel } from "./domain";
 
 const statusIcons = {
   Idea: Lightbulb,
@@ -66,7 +66,7 @@ export function ProgressLine({
     <div className="progress-line">
       <span>
         {!p.complete
-          ? "数据未完整"
+          ? "数据不完整"
           : p.total
             ? `${p.closed} / ${p.total} 已关闭`
             : "尚未拆分"}
@@ -90,7 +90,7 @@ export function Empty({
     <div className="empty">
       <CircleDashed size={28} />
       <h3>{title}</h3>
-      <p>{children}</p>
+      {children && <p>{children}</p>}
     </div>
   );
 }
@@ -113,11 +113,7 @@ export function TicketRow({
       {isBlocked(item, index) && <span className="blocked-text">受阻</span>}
       {item.request && (
         <span className="subtle">
-          {item.request.kind === "review"
-            ? "待验收"
-            : item.request.kind === "decision"
-              ? "待决策"
-              : "待操作"}
+          {item.request && requestLabel(item.request.kind)}
         </span>
       )}
       <span className="row-owner">{item.assignee ?? "未分配"}</span>

@@ -20,6 +20,7 @@ import {
   isBlocked,
   dateLabel,
   stageOf,
+  requestLabel,
   type Index,
   type RecordItem,
   type Snapshot,
@@ -47,24 +48,27 @@ export function Detail({
   onAccept,
   onRequestChanges,
   onRespond,
+  onReopen,
 }: {
   item: RecordItem;
   index: Index;
   snapshot: Snapshot;
   onClose: () => void;
   onOpen: (id: string) => void;
-  onSave: (item: RecordItem) => void;
-  onAccept: (id: string) => void;
-  onRequestChanges: (id: string, reason: string) => void;
-  onRespond: (id: string, body: string) => void;
+  onSave: (item: RecordItem) => void | Promise<void>;
+  onAccept: (id: string) => void | Promise<void>;
+  onReopen?: (id: string) => void | Promise<void>;
+  onRequestChanges: (id: string, reason: string) => void | Promise<void>;
+  onRespond: (id: string, body: string) => void | Promise<void>;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const backdropPress = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [full, setFull] = useState(false);
   const [edit, setEdit] = useState(false);
   const [draft, setDraft] = useState(item);
   const [confirm, setConfirm] = useState<
-    "accept" | "discard" | "changes" | "respond" | null
+    "accept" | "discard" | "changes" | "respond" | "reopen" | null
   >(null);
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
@@ -74,6 +78,7 @@ export function Detail({
   const [resumeConfirm, setResumeConfirm] = useState<
     "changes" | "respond" | null
   >(null);
+  const readOnly = snapshot.source === "bd" && !snapshot.complete;
   const isDirty = JSON.stringify(draft) !== JSON.stringify(item);
   const blocked = blockers(item, index);
   const blockedNow = isBlocked(item, index);
@@ -100,6 +105,7 @@ export function Detail({
     return () => window.removeEventListener("beforeunload", before);
   }, [hasUnsaved]);
   const requestExit = (destination: "read" | "close" | { id: string }) => {
+    if (busy) return;
     if (hasUnsaved) {
       setPendingExit(destination);
       if (confirm !== "discard")
@@ -120,7 +126,8 @@ export function Detail({
   const openOther = (id: string) => {
     requestExit({ id });
   };
-  const save = () => {
+  const save = async () => {
+    if (busy) return;
     if (!draft.title.trim()) {
       setError("标题不能为空。");
       return;
@@ -134,9 +141,16 @@ export function Detail({
       setError("计划需要开始与结束日期，且开始不能晚于结束。");
       return;
     }
-    onSave({ ...draft, title: draft.title.trim() });
-    setError("");
-    setEdit(false);
+    setBusy(true);
+    try {
+      await onSave({ ...draft, title: draft.title.trim() });
+      setError("");
+      setEdit(false);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
   };
   return (
     <dialog
@@ -187,7 +201,7 @@ export function Detail({
         </div>
       </header>
       <div className="detail-scroll">
-        <div className="detail-reading">
+        <div className="detail-reading" inert={busy}>
           <div className="detail-breadcrumb">
             {ancestry(item, index).map((p) => (
               <span key={p.id}>
@@ -220,7 +234,7 @@ export function Detail({
             <span className="grow" />
             <button
               className="text-button"
-              disabled={confirm !== null}
+              disabled={readOnly || busy || confirm !== null}
               onClick={() => {
                 if (edit) requestExit("read");
                 else {
@@ -235,14 +249,11 @@ export function Detail({
           </div>
           {item.request && (
             <section className={`detail-request ${item.request.kind}`}>
-              <span className="eyebrow">
-                {item.request.kind === "review"
-                  ? "待验收"
-                  : item.request.kind === "decision"
-                    ? "待决策"
-                    : "待操作"}
-              </span>
-              <p>{item.request.reason}</p>
+              <span className="eyebrow">{requestLabel(item.request.kind)}</span>
+              {item.request.reason !== item.description &&
+                item.request.reason !== item.notes && (
+                  <p>{item.request.reason}</p>
+                )}
               {item.request.evidence && (
                 <div className="evidence">
                   <Check size={14} />
@@ -306,6 +317,63 @@ export function Detail({
                   }
                 />
               </label>
+              {snapshot.source === "bd" && (
+                <div className="edit-grid">
+                  <label className="edit-field">
+                    状态
+                    <select
+                      aria-label="状态"
+                      value={draft.status}
+                      disabled={item.status === "closed"}
+                      onChange={(e) =>
+                        setDraft({ ...draft, status: e.target.value })
+                      }
+                    >
+                      {[
+                        ...new Set([
+                          draft.status,
+                          "idea",
+                          "open",
+                          "in_progress",
+                          "blocked",
+                          "deferred",
+                          "parked",
+                        ]),
+                      ].map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="edit-field">
+                    归属
+                    <select
+                      aria-label="归属"
+                      value={draft.parent ?? ""}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          parent: e.target.value || undefined,
+                        })
+                      }
+                    >
+                      <option value="">独立工单</option>
+                      {snapshot.items
+                        .filter(
+                          (i) =>
+                            i.id !== item.id &&
+                            (i.role !== "ticket" || i.id === item.parent),
+                        )
+                        .map((i) => (
+                          <option key={i.id} value={i.id}>
+                            {i.title}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                </div>
+              )}
               <div className="edit-grid">
                 <label className="edit-field">
                   负责人
@@ -347,6 +415,14 @@ export function Detail({
             <div className="markdown">
               <Markdown>{item.description}</Markdown>
             </div>
+          )}
+          {!edit && item.notes && (
+            <section className="detail-section">
+              <h2>记录</h2>
+              <div className="markdown">
+                <Markdown>{item.notes}</Markdown>
+              </div>
+            </section>
           )}
           {item.acceptance && (
             <section className="detail-section">
@@ -458,7 +534,7 @@ export function Detail({
           {item.status === "closed" && (
             <p className="history-note">
               {item.closure === "accepted"
-                ? "本轮已通过并关闭。"
+                ? "已验收并关闭"
                 : "历史已关闭 · 验收记录未知"}
             </p>
           )}
@@ -480,20 +556,22 @@ export function Detail({
         <section className="detail-confirm" role="alert">
           <strong>
             {confirm === "accept"
-              ? `通过并关闭 ${item.id}？`
-              : confirm === "discard"
-                ? "草稿还没有保存"
-                : confirm === "respond"
-                  ? `${item.request?.kind === "decision" ? "提交决定" : "确认操作完成"} · ${item.id}`
-                  : `要求修改 ${item.id}`}
+              ? `${item.request?.kind === "review" ? "通过并关闭" : "关闭工单"} ${item.id}？`
+              : confirm === "reopen"
+                ? `重新打开 ${item.id}？`
+                : confirm === "discard"
+                  ? "放弃未保存的修改？"
+                  : confirm === "respond"
+                    ? `${item.request?.kind === "decision" ? "提交决定" : item.request?.kind === "action" ? "确认操作完成" : "提交答复"} · ${item.id}`
+                    : `要求修改 ${item.id}`}
           </strong>
           <p>
-            {confirm === "accept"
+            {confirm === "accept" || confirm === "reopen"
               ? item.title
               : confirm === "discard"
                 ? pendingExit === "read"
                   ? "放弃草稿将恢复已保存内容。"
-                  : "草稿未保存，离开前请选择如何处理。"
+                  : "离开会丢失这次修改。"
                 : confirm === "respond"
                   ? `${item.title} · 答复后工单状态保持不变。`
                   : "提交修改意见后，工单返回执行中。"}
@@ -501,12 +579,15 @@ export function Detail({
           {(confirm === "changes" || confirm === "respond") && (
             <textarea
               autoFocus
+              disabled={busy}
               aria-label={
                 confirm === "changes"
                   ? "修改原因"
                   : item.request?.kind === "decision"
                     ? "决策答复"
-                    : "操作结果"
+                    : item.request?.kind === "action"
+                      ? "操作结果"
+                      : "答复"
               }
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -515,13 +596,16 @@ export function Detail({
                   ? "输入修改要求"
                   : item.request?.kind === "decision"
                     ? "输入决定及其依据"
-                    : "输入操作结果"
+                    : item.request?.kind === "action"
+                      ? "输入操作结果"
+                      : "输入答复"
               }
             />
           )}
           <div>
             <button
               className="quiet-button"
+              disabled={busy}
               onClick={() => {
                 setConfirm(confirm === "discard" ? resumeConfirm : null);
                 setPendingExit(null);
@@ -534,41 +618,61 @@ export function Detail({
             <button
               className="primary-button"
               disabled={
+                (readOnly && confirm !== "discard") ||
+                busy ||
                 ((confirm === "changes" || confirm === "respond") &&
                   !reason.trim()) ||
                 (confirm === "accept" && blockedNow)
               }
-              onClick={() => {
-                if (confirm === "accept") {
-                  onAccept(item.id);
-                  onClose();
-                } else if (confirm === "changes") {
-                  onRequestChanges(item.id, reason.trim());
-                  onClose();
-                } else if (confirm === "respond") {
-                  onRespond(item.id, reason.trim());
-                  setReason("");
-                } else {
-                  setDraft(item);
-                  setEdit(false);
-                  setReason("");
+              onClick={async () => {
+                if (busy) return;
+                setBusy(true);
+                try {
+                  if (confirm === "accept") {
+                    await onAccept(item.id);
+                    onClose();
+                  } else if (confirm === "reopen") {
+                    await onReopen?.(item.id);
+                    onClose();
+                  } else if (confirm === "changes") {
+                    await onRequestChanges(item.id, reason.trim());
+                    onClose();
+                  } else if (confirm === "respond") {
+                    await onRespond(item.id, reason.trim());
+                    setReason("");
+                  } else {
+                    setDraft(item);
+                    setEdit(false);
+                    setReason("");
+                    setError("");
+                    if (pendingExit === "close") onClose();
+                    else if (pendingExit && pendingExit !== "read")
+                      onOpen(pendingExit.id);
+                  }
+                  setPendingExit(null);
+                  setResumeConfirm(null);
+                  setConfirm(null);
                   setError("");
-                  if (pendingExit === "close") onClose();
-                  else if (pendingExit && pendingExit !== "read")
-                    onOpen(pendingExit.id);
+                } catch (e) {
+                  setError(String(e));
+                } finally {
+                  setBusy(false);
                 }
-                setPendingExit(null);
-                setResumeConfirm(null);
-                setConfirm(null);
               }}
             >
-              {confirm === "accept"
-                ? "确认通过"
-                : confirm === "changes"
-                  ? "提交修改意见"
-                  : confirm === "respond"
-                    ? "提交答复"
-                    : "放弃草稿"}
+              {busy
+                ? "保存中…"
+                : confirm === "reopen"
+                  ? "重新打开"
+                  : confirm === "accept"
+                    ? item.request?.kind === "review"
+                      ? "确认通过"
+                      : "确认关闭"
+                    : confirm === "changes"
+                      ? "提交修改意见"
+                      : confirm === "respond"
+                        ? "提交答复"
+                        : "放弃草稿"}
             </button>
           </div>
         </section>
@@ -579,15 +683,15 @@ export function Detail({
             <button
               className="primary-button"
               onClick={save}
-              disabled={confirm !== null}
+              disabled={readOnly || busy || confirm !== null}
             >
-              保存
+              {busy ? "保存中…" : "保存"}
             </button>
           ) : item.request?.kind === "review" && item.status !== "closed" ? (
             <>
               <button
                 className="quiet-button"
-                disabled={confirm !== null}
+                disabled={readOnly || busy || confirm !== null}
                 onClick={() => {
                   setReason("");
                   setConfirm("changes");
@@ -597,7 +701,7 @@ export function Detail({
               </button>
               <button
                 className="primary-button"
-                disabled={blockedNow || confirm !== null}
+                disabled={readOnly || busy || blockedNow || confirm !== null}
                 title={blockedNow ? "工单仍受阻，无法关闭" : ""}
                 onClick={() => setConfirm("accept")}
               >
@@ -607,19 +711,40 @@ export function Detail({
           ) : item.request && item.status !== "closed" ? (
             <button
               className="primary-button"
-              disabled={confirm !== null}
+              disabled={readOnly || busy || confirm !== null}
               onClick={() => {
                 setReason("");
                 setConfirm("respond");
               }}
             >
-              {item.request.kind === "decision" ? "提交决定" : "确认操作完成"}
+              {item.request.kind === "decision"
+                ? "提交决定"
+                : item.request.kind === "action"
+                  ? "确认操作完成"
+                  : "提交答复"}
             </button>
           ) : (
             <button className="quiet-button" onClick={requestClose}>
               返回
             </button>
           )}
+          {snapshot.source === "bd" &&
+            !edit &&
+            item.request?.kind !== "review" && (
+              <button
+                className="quiet-button"
+                disabled={
+                  busy ||
+                  confirm !== null ||
+                  (item.status !== "closed" && blockedNow)
+                }
+                onClick={() =>
+                  setConfirm(item.status === "closed" ? "reopen" : "accept")
+                }
+              >
+                {item.status === "closed" ? "重新打开" : "关闭工单"}
+              </button>
+            )}
         </div>
       </footer>
     </dialog>
@@ -631,14 +756,21 @@ export function NewIdea({
   onCreate,
 }: {
   onClose: () => void;
-  onCreate: (title: string, description: string) => void;
+  onCreate: (
+    title: string,
+    description: string,
+    operation: string,
+  ) => void | Promise<void>;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [operation] = useState(() => crypto.randomUUID());
   const [discard, setDiscard] = useState(false);
   const requestClose = () =>
-    title || description ? setDiscard(true) : onClose();
+    busy ? undefined : title || description ? setDiscard(true) : onClose();
   useEffect(() => {
     const element = ref.current;
     element?.showModal();
@@ -664,15 +796,25 @@ export function NewIdea({
           <X size={18} />
         </button>
       </div>
-      <p className="subtle">初始状态：Idea · 项目：未分配</p>
+      <p className="subtle">Idea · 未分配项目</p>
       <form
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          if (title.trim()) onCreate(title.trim(), description);
+          if (!title.trim() || busy) return;
+          setBusy(true);
+          setError("");
+          try {
+            await onCreate(title.trim(), description, operation);
+          } catch (e) {
+            setError(String(e));
+          } finally {
+            setBusy(false);
+          }
         }}
       >
         <input
           autoFocus
+          disabled={busy}
           aria-label="工单标题"
           placeholder="输入工单标题"
           value={title}
@@ -680,6 +822,7 @@ export function NewIdea({
           required
         />
         <textarea
+          disabled={busy}
           aria-label="工单描述"
           placeholder="输入工单描述（可选）"
           value={description}
@@ -687,15 +830,19 @@ export function NewIdea({
           rows={5}
         />
         <footer>
-          <button className="primary-button" disabled={!title.trim()}>
-            创建
+          <button className="primary-button" disabled={busy || !title.trim()}>
+            {busy ? "创建中…" : "创建"}
           </button>
         </footer>
       </form>
+      {error && (
+        <p role="alert" className="warning">
+          {error}
+        </p>
+      )}
       {discard && (
         <section className="detail-confirm" role="alert">
-          <strong>工单尚未创建</strong>
-          <p>草稿未保存。</p>
+          <strong>放弃草稿？</strong>
           <div>
             <button className="quiet-button" onClick={() => setDiscard(false)}>
               继续编辑

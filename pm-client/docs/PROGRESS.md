@@ -1,6 +1,21 @@
-# UI-01 delivery status
+# Delivery and verification
 
-Updated 2026-09-27. The interactive preview includes completion-filter, legibility, workflow fixes, ticket terminology and a collapsible workspace header. UI-02 has not started. Current verification and remaining limitations are separated below.
+Updated 2026-09-27. The native app now connects to a selected local BD workspace. The browser keeps the UI-01 examples. Earlier preview verification is retained below as history.
+
+## Native integration and copy revision
+
+- Rust commands validate the selected embedded workspace, use argument arrays with bounded process execution, and read complete lists plus native Ready/Blocked. Routing and server configurations are rejected. Reads/writes within this app serialize.
+- Create, minimal field edits, manual plan/date clearing, parent changes, responses, request changes, close and reopen use BD with readback. Full-content fingerprints detect edits that share BD's one-second timestamp. Existing labels and metadata are preserved. CLI calls are not transactions; the remaining external race and partial-write recovery are documented in BD_CONTRACT.md.
+- A human label is shown as an unclassified request. Explicit labels identify review/decision/action. Legacy closures retain unknown acceptance. Molecule/ephemeral/template ancestor auto-close flows are rejected.
+- Native mode opens workspace setup, not examples. Connection errors retain the last data and disable writes. The app refreshes idle lists and protects editing/response drafts. Browser live-mode tests use mocked IPC, not real user records.
+- Removed the long toolbar preview notice in native mode, redundant project descriptions/empty-state explanations and Map's permanent gesture footer. The browser has one compact reset notice. The icon uses the same Layers2 geometry as the sidebar, on a neutral rounded background; its editable SVG and ISC notice are included.
+- Timeline now follows the loaded date and supports range navigation; initial expanded groups and completion dates derive from records instead of demo IDs/dates. Map counts only filtered-out descendants in its hidden-ticket notice, including nested hierarchies; edge keyboard help matches the disabled deletion behavior.
+
+Verification completed during implementation: 26 frontend/domain tests; Rust fingerprint/validation tests and the opt-in real-CLI round trip in a fresh temporary database; Chromium and WebKit interaction tests for the compact header, detail dismissal and native-mode IPC error/success paths. Independent adapter review reproduced and checked metadata merge, same-second edits, retries, route refusal and molecule parent safeguards. The arm64 release app built with ad-hoc signing and passed signature verification. In the installed native window, an edit in a fresh disposable BD workspace was saved, read back through the CLI, and retained after quitting and reopening. This is actual native evidence; it is separate from the mocked browser checks. The selected existing workspace was then opened read-only in the installed app, including Projects, Board, Map and Timeline; the workspace selection was restored after restart.
+
+Remaining scope: arbitrary dependency editing, rich forecast generation, automatic project classification, embedded AI chat, nested management tools for BD infrastructure/molecules, multi-machine/routed/server access, Intel testing, Developer ID signing/notarization and distribution installation. These are not implied by the local native data connection.
+
+## Earlier UI-01 preview evidence
 
 ## Detail dismissal follow-up
 

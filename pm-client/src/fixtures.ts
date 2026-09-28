@@ -115,7 +115,7 @@ export function createFixture(): Snapshot {
       labels: ["决策"],
       request: {
         kind: "decision",
-        reason: "移动端适配是否进入下一轮？请在这张票留下范围决定。",
+        reason: "移动端适配是否进入下一轮？",
       },
       due: "2026-09-26",
     }),
@@ -167,7 +167,7 @@ export function createFixture(): Snapshot {
       labels: ["素材"],
       request: {
         kind: "action",
-        reason: "需要你选一组可公开使用的素材，才能完成演示内容。",
+        reason: "选择一组可公开使用的演示素材。",
       },
       due: "2026-09-25",
     }),
