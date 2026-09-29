@@ -35,6 +35,16 @@ npm --prefix pm-client run desktop:build
 
 应用输出到 `pm-client/src-tauri/target/release/bundle/macos/Beads PM.app`。应用内置前端，无需开发服务。首次打开需选择本机 BD 1.2.2 embedded 工作区；发行签名和公证尚未配置。
 
+## 顺序编号
+
+桌面版、Scotty 网页与 AI/CLI 共用 `crates/beads-core`：工单 `id-N`、项目 `proj-N`、里程碑 `milestone-N`。已有编号保留。Docker 已包含创建工具；其他方式启动 Scotty 前，用 Rust/Cargo 构建：
+
+```sh
+npm run build:creator
+```
+
+macOS 也可使用新版 Beads PM 安装包内的创建工具。AI 命令与失败处理见[创建工具说明](crates/beads-core/README.md)。直接执行原始 `bd create` 仍使用 BD 自带编号。
+
 ## 开发检查
 
 ```sh

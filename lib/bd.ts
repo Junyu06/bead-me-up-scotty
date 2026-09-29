@@ -1,4 +1,5 @@
 import "server-only";
+import { createBead } from "./beads-create.mjs";
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -190,25 +191,11 @@ export function createBdStore(repoPath: string): BeadsStore {
 
     create(input: CreateInput, actor: string) {
       return serializeWrite(repoPath, async () => {
-        if (input.backlog) await ensureIdeaStatus(actor);
-        const args = [
-          "create",
-          input.title,
-          "-t",
-          input.issue_type,
-          "--priority",
-          String(input.priority),
-        ];
-        if (input.description) args.push("--description", input.description);
-        if (input.assignee) args.push("--assignee", input.assignee);
-        if (input.labels?.length) args.push("-l", input.labels.join(","));
-        if (input.parent) args.push("--parent", input.parent);
-        const created = await runBdJson<{ id: string }>(args, rw(actor));
-        const id = created.id;
-        if (input.backlog) {
-          await runBdRaw(["update", id, "-s", "idea"], rw(actor));
-        }
-        return show(id);
+        const { backlog, ...fields } = input;
+        const created = await createBead(repoPath, BD_BIN, actor, {
+          ...fields, status: backlog ? "idea" : "open",
+        });
+        return beadSchema.parse(created);
       });
     },
 

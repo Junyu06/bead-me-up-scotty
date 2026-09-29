@@ -151,6 +151,7 @@ export function unwrapEnvelope(raw: unknown): unknown {
 // ---- Input shapes for writes ----
 
 export const createInputSchema = z.object({
+  operation: z.string().uuid().optional(),
   title: z.string().min(1, "Title is required").max(500),
   issue_type: z.enum(BEAD_TYPES).default("task"),
   priority: z.coerce.number().int().min(0).max(4).default(2),

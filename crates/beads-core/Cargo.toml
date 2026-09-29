@@ -1,18 +1,13 @@
 [package]
-name = "beads-pm"
+name = "beads-core"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.89"
 
-[build-dependencies]
-tauri-build = { version = "2", features = [] }
-
 [dependencies]
-tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-beads-core = { path = "../../crates/beads-core" }
+chrono = "0.4"
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4"] }
 tokio = { version = "1", features = ["process", "io-util", "time", "sync", "macros", "rt-multi-thread"] }
-
-[features]
-custom-protocol = ["tauri/custom-protocol"]

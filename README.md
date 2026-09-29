@@ -35,6 +35,16 @@ npm --prefix pm-client run desktop:build
 
 The bundle is written to `pm-client/src-tauri/target/release/bundle/macos/Beads PM.app`. It embeds the frontend and does not need a development server. On first launch, choose a local BD 1.2.2 embedded workspace. Distribution signing and notarization are not configured.
 
+## Sequential creation
+
+The desktop app, Scotty web and AI/CLI share `crates/beads-core`. IDs are `id-N` for tickets, `proj-N` for projects and `milestone-N` for milestones. Existing IDs are retained. For Scotty outside Docker, build the helper with Rust/Cargo before starting:
+
+```sh
+npm run build:creator
+```
+
+A compatible Beads PM installation can also supply the helper on macOS. AI commands and recovery behavior are in the [creator guide](crates/beads-core/README.md). Raw `bd create` does not use this numbering scheme.
+
 ## Development checks
 
 ```sh

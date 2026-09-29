@@ -50,12 +50,99 @@ pub enum ActionKind {
     Reopen,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct Create {
     pub title: String,
     pub description: String,
     pub operation: String,
+    pub issue_type: String,
+    pub priority: u8,
+    pub parent: String,
+    pub assignee: String,
+    pub labels: Vec<String>,
+    pub status: String,
+}
+impl Default for Create {
+    fn default() -> Self {
+        Self {
+            title: String::new(),
+            description: String::new(),
+            operation: String::new(),
+            issue_type: "task".into(),
+            priority: 2,
+            parent: String::new(),
+            assignee: String::new(),
+            labels: Vec::new(),
+            status: "idea".into(),
+        }
+    }
+}
+pub mod cli;
+
+fn creation_prefix(input: &Create) -> &'static str {
+    match input.issue_type.as_str() {
+        "epic" if input.parent.is_empty() => "proj",
+        "epic" | "milestone" => "milestone",
+        _ => "id",
+    }
+}
+fn parent_id(item: &Value) -> &str {
+    if !string(item, "parent").is_empty() {
+        return string(item, "parent");
+    }
+    item.get("dependencies")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .find(|d| {
+            string(d, "type") == "parent-child" || string(d, "dependency_type") == "parent-child"
+        })
+        .map(|d| {
+            let id = string(d, "depends_on_id");
+            if id.is_empty() {
+                string(d, "id")
+            } else {
+                id
+            }
+        })
+        .unwrap_or("")
+}
+fn sorted_labels(item: &Value) -> Vec<String> {
+    let mut labels: Vec<_> = item
+        .get("labels")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect();
+    labels.sort();
+    labels.dedup();
+    labels
+}
+fn creation_request(input: &Create) -> Value {
+    let mut request = input.clone();
+    request.title = request.title.trim().into();
+    request.labels.sort();
+    request.labels.dedup();
+    serde_json::to_value(request).expect("serializable request")
+}
+fn creation_fields_match(item: &Value, input: &Create) -> bool {
+    let expected_labels = item
+        .pointer("/metadata/pm_create/labels")
+        .cloned()
+        .unwrap_or_else(|| json!(input.labels));
+    string(item, "title") == input.title.trim()
+        && string(item, "description") == input.description
+        && string(item, "issue_type") == input.issue_type
+        && item.get("priority").and_then(Value::as_u64) == Some(input.priority as u64)
+        && parent_id(item) == input.parent
+        && string(item, "assignee") == input.assignee
+        && sorted_labels(item) == sorted_labels(&json!({"labels": expected_labels}))
+        && item
+            .pointer("/metadata/pm_create/request")
+            .is_none_or(|v| *v == creation_request(input))
 }
 
 pub fn default_executable() -> String {
@@ -187,7 +274,7 @@ fn check_id(id: &str) -> Result<()> {
     }
 }
 fn operation(value: &str) -> Result<()> {
-    if value.len() == 36 && value.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-') {
+    if value.len() == 36 && uuid::Uuid::parse_str(value).is_ok() {
         Ok(())
     } else {
         Err("操作标识无效。".into())
@@ -542,10 +629,7 @@ fn creation_receipt<'a>(
         return Ok(None);
     };
     let id = string(item, "id");
-    if string(item, "title") != input.title.trim()
-        || string(item, "description") != input.description
-        || string(item, "issue_type") != "task"
-    {
+    if !creation_fields_match(item, input) {
         return Err(format!(
             "上次创建的工单是 {id}。请先打开核对，不要用同一操作创建不同内容。"
         ));
@@ -559,7 +643,7 @@ fn creation_receipt<'a>(
             "工单 {id} 已创建，但短编号尚未完成。请先打开核对；不会重复创建。"
         ));
     }
-    if string(item, "status") != "idea" {
+    if string(item, "status") != input.status {
         return Err(format!(
             "上次已创建 {id}，当前状态为 {}。请打开核对；不会重复创建。",
             string(item, "status")
@@ -588,14 +672,6 @@ fn next_creation_number(prefix: &str, items: &[Value], reserved: u64) -> Result<
         .ok_or_else(|| "工单编号已超出范围。".into())
 }
 
-fn supports_sequential_prefix(prefix: &str) -> bool {
-    valid_id(prefix)
-        && prefix
-            .split('-')
-            .next()
-            .is_some_and(|first| !first.is_empty() && first.bytes().all(|c| c.is_ascii_lowercase()))
-}
-
 fn check_pending_creation(item: &Value, input: &Create, target: &str) -> Result<()> {
     if item
         .pointer("/metadata/pm_create/operation")
@@ -605,10 +681,8 @@ fn check_pending_creation(item: &Value, input: &Create, target: &str) -> Result<
             .pointer("/metadata/pm_create/target")
             .and_then(Value::as_str)
             != Some(target)
-        || string(item, "title") != input.title.trim()
-        || string(item, "description") != input.description
+        || !creation_fields_match(item, input)
         || string(item, "status") != "open"
-        || string(item, "issue_type") != "task"
     {
         return Err(format!(
             "工单 {} 已被更新，请刷新核对；未继续修改。",
@@ -628,6 +702,38 @@ pub async fn create(config: &Config, input: Create) -> Result<Value> {
     {
         return Err("标题或描述无效。".into());
     }
+    if ![
+        "task",
+        "feature",
+        "bug",
+        "chore",
+        "epic",
+        "decision",
+        "spike",
+        "story",
+        "milestone",
+    ]
+    .contains(&input.issue_type.as_str())
+        || input.priority > 4
+        || input.assignee.len() > 200
+        || input.assignee.contains('\0')
+        || input.labels.len() > 100
+        || input
+            .labels
+            .iter()
+            .any(|s| s.is_empty() || s.len() > 200 || s.contains([',', '\0']))
+        || ![
+            "open",
+            "idea",
+            "parked",
+            "in_progress",
+            "blocked",
+            "deferred",
+        ]
+        .contains(&input.status.as_str())
+    {
+        return Err("创建字段无效。".into());
+    }
     let context = check_context(config).await?;
     // OS locking is released on exit, including crashes. No database file is
     // opened here. All client instances sharing this workspace use this lock.
@@ -642,9 +748,6 @@ pub async fn create(config: &Config, input: Create) -> Result<Value> {
     let prefix = run(config, &args(&["config", "get", "issue_prefix"]), false).await?;
     let prefix = string(&prefix, "value");
     check_id(prefix)?;
-    if !supports_sequential_prefix(prefix) {
-        return Err(format!("当前 BD 不支持为前缀 {prefix} 分配顺序编号；第一个连字符前必须是小写字母。未创建工单。"));
-    }
     let items = records(
         run(
             config,
@@ -661,8 +764,25 @@ pub async fn create(config: &Config, input: Create) -> Result<Value> {
         )
         .await?,
     )?;
-    if let Some(item) = creation_receipt(&items, prefix, &input)? {
-        return Ok(item.clone());
+    let matching: Vec<_> = items
+        .iter()
+        .filter(|item| {
+            string(item, "id") == format!("{prefix}-{}", input.operation.replace('-', ""))
+                || item
+                    .pointer("/metadata/pm_create/operation")
+                    .and_then(Value::as_str)
+                    == Some(input.operation.as_str())
+        })
+        .collect();
+    if matching.len() > 1 {
+        return Err("同一次创建对应多张工单，请先核对。".into());
+    }
+    if let Some(item) = matching.first() {
+        let previous = show(config, string(item, "id")).await?;
+        if creation_receipt(std::slice::from_ref(&previous), prefix, &input)?.is_none() {
+            return Err("创建回执已被修改，请先核对；未新建工单。".into());
+        }
+        return Ok(previous);
     }
     let mode = run(config, &args(&["config", "get", "issue_id_mode"]), false).await?;
     if string(&mode, "value")
@@ -671,32 +791,53 @@ pub async fn create(config: &Config, input: Create) -> Result<Value> {
     {
         return Err("工作区已启用 BD 的 counter 编号模式，当前客户端无法与它安全共用顺序编号。未创建工单，工作区配置未改动。".into());
     }
-    let custom = run(config, &args(&["config", "get", "status.custom"]), false).await?;
-    let value = string(&custom, "value");
-    if value.split(',').map(str::trim).any(|s| s == "idea:wip") {
-    } else if value
-        .split(',')
-        .any(|s| s.trim().split(':').next() == Some("idea"))
-    {
-        return Err("BD 的 idea 状态不是 wip 分类，请检查工作区配置。".into());
-    } else {
-        let next = if value.is_empty() {
-            "idea:wip".into()
+    if input.status == "idea" {
+        let custom = run(config, &args(&["config", "get", "status.custom"]), false).await?;
+        let value = string(&custom, "value");
+        if value.split(',').map(str::trim).any(|s| s == "idea:wip") {
+        } else if value
+            .split(',')
+            .any(|s| s.trim().split(':').next() == Some("idea"))
+        {
+            return Err("BD 的 idea 状态不是 wip 分类，请检查工作区配置。".into());
         } else {
-            format!("{value},idea:wip")
-        };
-        run(
-            config,
-            &args(&["config", "set", "status.custom", &next]),
-            true,
-        )
-        .await?;
+            let next = if value.is_empty() {
+                "idea:wip".into()
+            } else {
+                format!("{value},idea:wip")
+            };
+            run(
+                config,
+                &args(&["config", "set", "status.custom", &next]),
+                true,
+            )
+            .await?;
+        }
     }
+    if input.status == "parked" {
+        let custom = run(config, &args(&["config", "get", "status.custom"]), false).await?;
+        if !string(&custom, "value")
+            .split(',')
+            .any(|s| s.trim().split(':').next() == Some("parked"))
+        {
+            return Err("工作区尚未配置 parked 状态，未创建工单。".into());
+        }
+    }
+    let mut effective_labels = input.labels.clone();
+    if !input.parent.is_empty() {
+        // An explicit UUID cannot be combined with BD's hierarchical --parent.
+        // Inherit labels explicitly, and verify the parent-child edge after create.
+        let parent = show(config, &input.parent).await?;
+        effective_labels.extend(sorted_labels(&parent));
+    }
+    effective_labels.sort();
+    effective_labels.dedup();
+    let family = creation_prefix(&input);
     // Fail before creation on BD versions without the safe rename command.
     run(config, &args(&["rename", "--help"]), false).await?;
     // Reserve before creating. The high-water mark survives permanent deletion;
     // a failed/uncertain create may leave a gap, but never recycles its number.
-    let counter_key = format!("pm.sequence.{prefix}");
+    let counter_key = format!("pm.sequence.{family}");
     let counter = run(config, &args(&["config", "get", &counter_key]), false).await?;
     let raw = string(&counter, "value");
     let reserved = if raw.is_empty() {
@@ -705,8 +846,8 @@ pub async fn create(config: &Config, input: Create) -> Result<Value> {
         raw.parse::<u64>()
             .map_err(|_| "工单编号记录无效，未新建工单。")?
     };
-    let number = next_creation_number(prefix, &items, reserved)?;
-    let id = format!("{prefix}-{number}");
+    let number = next_creation_number(family, &items, reserved)?;
+    let id = format!("{family}-{number}");
     check_id(&id)?;
     run(
         config,
@@ -715,30 +856,36 @@ pub async fn create(config: &Config, input: Create) -> Result<Value> {
     )
     .await?;
     let temporary = format!("{prefix}-{}", input.operation.replace('-', ""));
-    let receipt = json!({"pm_create":{"operation":input.operation,"target":id}}).to_string();
-    if let Err(error) = run(
-        config,
-        &args(&[
-            "create",
-            "--id",
-            &temporary,
-            "--title",
-            input.title.trim(),
-            "--description",
-            &input.description,
-            "--type",
-            "task",
-            "--priority",
-            "2",
-            "--metadata",
-            &receipt,
-            "--repo",
-            ".",
-        ]),
-        true,
-    )
-    .await
-    {
+    let receipt = json!({"pm_create":{"operation":input.operation,"target":id,
+        "request":creation_request(&input),"labels":effective_labels}})
+    .to_string();
+    let mut command = args(&[
+        "create",
+        "--id",
+        &temporary,
+        "--title",
+        input.title.trim(),
+        "--description",
+        &input.description,
+        "--type",
+        &input.issue_type,
+        "--priority",
+        &input.priority.to_string(),
+        "--metadata",
+        &receipt,
+        "--repo",
+        ".",
+    ]);
+    if !input.assignee.is_empty() {
+        command.extend(args(&["--assignee", &input.assignee]));
+    }
+    if !effective_labels.is_empty() {
+        command.extend(args(&["--labels", &effective_labels.join(",")]));
+    }
+    if !input.parent.is_empty() {
+        command.extend(args(&["--deps", &format!("parent-child:{}", input.parent)]));
+    }
+    if let Err(error) = run(config, &command, true).await {
         return Err(format!(
             "工单 {temporary} 的创建结果尚未确认。请刷新核对后重试。{error}"
         ));
@@ -753,8 +900,16 @@ pub async fn create(config: &Config, input: Create) -> Result<Value> {
     }
     let renamed = show(config, &id).await?;
     check_pending_creation(&renamed, &input, &id)?;
-    if let Err(e) = run(config, &args(&["update", &id, "--status", "idea"]), true).await {
-        return Err(format!("工单 {id} 已创建，但 Idea 状态尚未确认。{e}"));
+    if input.status != "open" {
+        if let Err(e) = run(
+            config,
+            &args(&["update", &id, "--status", &input.status]),
+            true,
+        )
+        .await
+        {
+            return Err(format!("工单 {id} 已创建，但请求状态尚未确认。{e}"));
+        }
     }
     let saved = show(config, &id).await?;
     if string(&saved, "id") != id

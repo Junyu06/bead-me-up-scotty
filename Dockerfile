@@ -2,13 +2,18 @@
 # bd uses embedded Dolt (CGO), so the prebuilt Linux binary is glibc-linked.
 # That's why the runner stage uses Debian slim instead of Alpine (musl).
 # Release filenames use Docker's TARGETARCH values (amd64/arm64) verbatim.
-ARG BD_VERSION=1.1.0
+ARG BD_VERSION=1.2.2
 ARG NODE_VERSION=26.4.0
 FROM alpine:3.22 AS bd
 ARG BD_VERSION
 ARG TARGETARCH
 ADD https://github.com/gastownhall/beads/releases/download/v${BD_VERSION}/beads_${BD_VERSION}_linux_${TARGETARCH}.tar.gz /tmp/bd.tar.gz
 RUN tar -xzf /tmp/bd.tar.gz -C /tmp && mv /tmp/bd /usr/local/bin/bd
+
+FROM rust:1.89-bookworm AS creator
+WORKDIR /creator
+COPY crates/beads-core ./
+RUN cargo build --release --locked
 
 # ── Eleventy: self-contained tree for the showcase publisher ─────────────────
 # The app locates node_modules/@11ty/eleventy/cmd.cjs by scanning the
@@ -74,7 +79,8 @@ RUN rm -rf ./node_modules/@11ty
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-# Copy the prebuilt bd CLI into the image
+# Copy the shared sequential creator and prebuilt bd CLI into the image
+COPY --from=creator /creator/target/release/beads-create /usr/local/bin/beads-create
 COPY --from=bd --chown=nextjs:nodejs /usr/local/bin/bd /usr/local/bin/bd
 
 # Eleventy for the showcase publisher. /node_modules sits on eleventyBin()'s

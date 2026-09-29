@@ -6,14 +6,16 @@
   "author": "Brendan <brendan@appstart.one>",
   "bin": {
     "bead-me-up-scotty": "bin/bead-me-up-scotty.mjs",
-    "scotty": "bin/bead-me-up-scotty.mjs"
+    "scotty": "bin/bead-me-up-scotty.mjs",
+    "beads-pm-create": "bin/beads-create.mjs"
   },
   "files": [
     "bin",
     ".next",
     "public",
     "next.config.ts",
-    "lib/github-repo.ts"
+    "lib/github-repo.ts",
+    "lib/beads-create.mjs"
   ],
   "engines": {
     "node": ">=20"
@@ -23,7 +25,8 @@
     "build": "next build",
     "start": "next start",
     "serve": "node scripts/serve.mjs",
-    "lint": "eslint"
+    "lint": "eslint",
+    "build:creator": "cargo build --manifest-path crates/beads-core/Cargo.toml --release --locked"
   },
   "dependencies": {
     "@11ty/eleventy": "^3.1.6",

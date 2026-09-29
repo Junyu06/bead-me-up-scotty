@@ -121,6 +121,7 @@ function CreateForm({
   const [newProjectName, setNewProjectName] = React.useState("");
   const selectedProjectLabel = selectedProject === "__new__"
     ? projectLabel(newProjectName) : selectedProject;
+  const [operation] = React.useState(() => crypto.randomUUID());
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
   const submitLock = React.useRef(false);
@@ -216,6 +217,7 @@ function CreateForm({
       }
 
       const newBead = await create.mutateAsync({
+        operation,
         title: form.title.trim(),
         issue_type: form.type,
         priority: form.priority,

@@ -22,14 +22,16 @@ npm --prefix pm-client run desktop:build
 
 ## 使用
 
-- 新建工单使用工作区前缀加顺序编号（如 `sample-1`、`sample-2`），默认为独立 Idea。在详情中可修改标题、描述、负责人、优先级、状态、归属、目标日期和人工计划。
+- 新建工单使用顺序编号（如 `id-1`、`id-2`），默认为独立 Idea。在详情中可修改标题、描述、负责人、优先级、状态、归属、目标日期和人工计划。
 - Board 提供完成时间范围与通用筛选；项目进度包含历史工单。
 - Need Me 将仅带 `human` 的工单显示为“待处理”。明确的 `pm:review`、`pm:decision`、`pm:action` 标签分别表示待验收、待决策和待操作；负责人或 `human` 标签本身不等于待验收。
 - 答复追加到 BD notes，并移除已答复的请求标签。要求修改会将待验收工单退回 `in_progress`，保留负责人。关闭和重新打开需要确认具体工单；会连带自动关闭父项的流程不在此版本内操作。
 - Timeline 区分目标日期和人工计划，可以切换日期范围。Map 布局、视图筛选是本机偏好；拖动节点不会改变归属。
 - 没有打开详情或新建表单时，每 30 秒及窗口重新获得焦点时刷新。刷新失败会保留上次内容并暂停修改，不会换成示例数据。打开详情会重读；保存前核对内容版本，保存后读回结果。
 
-新建要求工作区未启用 BD 原生 counter 模式，且前缀符合 `bd rename` 的格式（第一个连字符前为小写英文字母）。失败时可能跳号；已有 ID 不迁移。
+新建要求工作区未启用 BD 原生 counter 模式。失败时可能跳号；已有 ID 不迁移。
+
+项目用 `proj-N`，里程碑用 `milestone-N`，其余工单共用 `id-N`；三组编号在同一工作区分别递增。改变类型或归属保留原号。AI 和 Scotty 网页使用[同一创建入口](../crates/beads-core/README.md)。
 
 应用没有内置 AI 聊天或自动归类。当前版本不支持重定向、远程数据库和跨工作区路由。BD CLI 没有条件写入事务，其他进程仍可能在最后一次检查与写入之间修改工单；部分写入或结果不确定时会提示核对。协议和恢复边界见 [BD_CONTRACT.md](docs/BD_CONTRACT.md)。
 
@@ -45,7 +47,7 @@ npm --prefix pm-client run dev
 npm --prefix pm-client test
 npm --prefix pm-client run lint
 npm --prefix pm-client run build
-cargo test --manifest-path pm-client/src-tauri/Cargo.toml
+cargo test --manifest-path crates/beads-core/Cargo.toml
 ```
 
 预览运行后，在 `pm-client/` 中执行：
@@ -53,7 +55,7 @@ cargo test --manifest-path pm-client/src-tauri/Cargo.toml
 ```sh
 PM_TEST_URL=http://127.0.0.1:1420 npm run test:ui
 PM_BROWSER=webkit PM_TEST_URL=http://127.0.0.1:1420 npm run test:ui
-cargo test --manifest-path src-tauri/Cargo.toml -- --include-ignored --nocapture
+cargo test --manifest-path ../crates/beads-core/Cargo.toml -- --include-ignored --nocapture
 ```
 
 浏览器通过根目录的 `npx playwright install chromium webkit` 安装。浏览器测试使用示例或模拟的 IPC；Rust 集成测试会新建临时 Git/BD 工作区，验证真实写入、进程锁和其他 CLI 同时修改的情况；子进程辅助测试只使用这些临时工作区。

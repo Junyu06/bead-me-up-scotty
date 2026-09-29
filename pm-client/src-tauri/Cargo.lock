@@ -101,13 +101,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
-name = "beads-pm"
+name = "beads-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
  "serde",
  "serde_json",
  "sha2",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "beads-pm"
+version = "0.1.0"
+dependencies = [
+ "beads-core",
+ "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tokio",

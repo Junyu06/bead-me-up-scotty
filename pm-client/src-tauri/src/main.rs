@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-mod bd;
 use bd::{Config, Result};
+use beads_core as bd;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use tauri::{Manager, State};
@@ -65,6 +65,9 @@ async fn issue_action(input: bd::Action, state: State<'_, AppState>) -> Result<V
     bd::action(configured(&state)?, input).await
 }
 fn main() {
+    if bd::cli::is_command() {
+        std::process::exit(bd::cli::entry());
+    }
     tauri::Builder::default()
         .setup(|app| {
             let file = app.path().app_config_dir()?.join("workspace.json");

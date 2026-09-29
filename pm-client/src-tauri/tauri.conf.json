@@ -36,6 +36,9 @@
     ],
     "macOS": {
       "signingIdentity": "-"
-    }
+    },
+    "resources": [
+      "numbering.json"
+    ]
   }
 }

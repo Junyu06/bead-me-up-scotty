@@ -32,6 +32,9 @@ fn fingerprint_detects_same_second_changes_and_validation_rejects_flags() {
 }
 
 async fn test_workspace() -> Config {
+    test_workspace_prefix("pmtest").await
+}
+async fn test_workspace_prefix(prefix: &str) -> Config {
     static NEXT_WORKSPACE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let root = std::env::temp_dir().join(format!(
         "beads-pm-test-{}-{}-{}",
@@ -57,7 +60,7 @@ async fn test_workspace() -> Config {
         .args([
             "init",
             "--prefix",
-            "pmtest",
+            prefix,
             "--non-interactive",
             "--skip-agents",
             "--skip-hooks",
@@ -89,10 +92,11 @@ async fn isolated_round_trip() {
         title: "A title with $(literal) and `text`".into(),
         description: "Synthetic description".into(),
         operation: op.into(),
+        ..Create::default()
     };
     let created = create(&config, make()).await.unwrap();
     let id = string(&created, "id").to_owned();
-    assert_eq!(id, "pmtest-1", "new tickets need a short sequential ID");
+    assert_eq!(id, "id-1", "new tickets need a short sequential ID");
     assert_eq!(string(&created, "status"), "idea");
     assert_eq!(string(&create(&config, make()).await.unwrap(), "id"), id);
     let old = show(&config, &id).await.unwrap();
@@ -262,17 +266,12 @@ fn sequential_input(n: u32) -> Create {
         title: format!("Synthetic ticket {n}"),
         description: "Sequence test".into(),
         operation: format!("11111111-1111-4111-8111-{n:012}"),
+        ..Create::default()
     }
 }
 
 #[test]
 fn sequences_ignore_hashes_and_children_and_detect_overflow() {
-    for prefix in ["sample", "p-2", "sample-project"] {
-        assert!(supports_sequential_prefix(prefix));
-    }
-    for prefix in ["", "p2", "UPPER", "123", "bad prefix"] {
-        assert!(!supports_sequential_prefix(prefix));
-    }
     let rows = vec![
         json!({"id":"sample-3"}),
         json!({"id":"sample-ab12"}),
@@ -294,12 +293,12 @@ async fn sequential_creation_and_process_lock() {
     let config = test_workspace().await;
     for n in 1..=3 {
         let item = create(&config, sequential_input(n)).await.unwrap();
-        assert_eq!(string(&item, "id"), format!("pmtest-{n}"));
+        assert_eq!(string(&item, "id"), format!("id-{n}"));
         assert_eq!(string(&item, "status"), "idea");
     }
     assert_eq!(
         string(&create(&config, sequential_input(1)).await.unwrap(), "id"),
-        "pmtest-1"
+        "id-1"
     );
     let mut changed = sequential_input(1);
     changed.title = "Different content on retry".into();
@@ -321,7 +320,7 @@ async fn sequential_creation_and_process_lock() {
         clean_command(std::env::current_exe().unwrap().to_str().unwrap())
             .args([
                 "--exact",
-                "bd::tests::creation_process_worker",
+                "tests::creation_process_worker",
                 "--ignored",
                 "--nocapture",
             ])
@@ -337,13 +336,13 @@ async fn sequential_creation_and_process_lock() {
         String::from_utf8_lossy(&blocked.stdout)
     );
     drop(lock);
-    let saved = worker("pmtest-4");
+    let saved = worker("id-4");
     assert!(
         saved.status.success(),
         "{}",
         String::from_utf8_lossy(&saved.stdout)
     );
-    let retry = worker("pmtest-4");
+    let retry = worker("id-4");
     assert!(
         retry.status.success(),
         "{}",
@@ -351,16 +350,13 @@ async fn sequential_creation_and_process_lock() {
     );
     // Deleting only this confirmed exact ID in the disposable test database
     // must not make its number available again.
-    assert_eq!(
-        string(&show(&config, "pmtest-4").await.unwrap(), "id"),
-        "pmtest-4"
-    );
-    run(&config, &args(&["delete", "pmtest-4", "--force"]), true)
+    assert_eq!(string(&show(&config, "id-4").await.unwrap(), "id"), "id-4");
+    run(&config, &args(&["delete", "id-4", "--force"]), true)
         .await
         .unwrap();
     assert_eq!(
         string(&create(&config, sequential_input(5)).await.unwrap(), "id"),
-        "pmtest-5"
+        "id-5"
     );
     println!("PASS sequential IDs, retries, separate process lock and deletion high-water mark");
 }
@@ -412,7 +408,7 @@ async fn native_counter_mode_stops_before_creation() {
     assert!(failure.contains("counter"), "{failure}");
     let snap = snapshot(&config).await.unwrap();
     assert_eq!(snap["items"].as_array().unwrap().len(), 1);
-    for key in ["pm.sequence.pmtest", "status.custom"] {
+    for key in ["pm.sequence.id", "status.custom"] {
         let value = run(&config, &args(&["config", "get", key]), false)
             .await
             .unwrap();
@@ -456,7 +452,7 @@ if 'rename' in args:
     pos = args.index('rename')
     if len(args) > pos + 2 and not Path('collision-injected').exists():
         Path('collision-injected').touch()
-        subprocess.run([binary, '--sandbox', '--json', 'create', '--id', args[pos+2], '--title', 'External record must survive', '--repo', '.'], check=True, stdout=subprocess.DEVNULL)
+        subprocess.run([binary, '--sandbox', '--json', 'create', '--id', args[pos+2], '--force', '--title', 'External record must survive', '--repo', '.'], check=True, stdout=subprocess.DEVNULL)
     if len(args) > pos + 2 and Path('modify-after-rename').exists():
         result = subprocess.run([binary, *args])
         if result.returncode == 0:
@@ -467,8 +463,8 @@ os.execv(binary, [binary, *args])
     std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o700)).unwrap();
     config.executable = wrapper.to_string_lossy().into();
     let failed = create(&config, sequential_input(1)).await.unwrap_err();
-    assert!(failed.contains("编号 pmtest-1 尚未确认"), "{failed}");
-    let other = show(&config, "pmtest-1").await.unwrap();
+    assert!(failed.contains("编号 id-1 尚未确认"), "{failed}");
+    let other = show(&config, "id-1").await.unwrap();
     assert_eq!(string(&other, "title"), "External record must survive");
     assert!(other.pointer("/metadata/pm_create").is_none());
     let temporary = "pmtest-11111111111141118111000000000001";
@@ -479,25 +475,237 @@ os.execv(binary, [binary, *args])
         .unwrap_err()
         .contains("短编号尚未完成"));
     assert_eq!(
-        string(&show(&config, "pmtest-1").await.unwrap(), "title"),
+        string(&show(&config, "id-1").await.unwrap(), "title"),
         "External record must survive"
     );
     let snap = snapshot(&config).await.unwrap();
     assert_eq!(snap["items"].as_array().unwrap().len(), 2);
     assert_eq!(
         string(&create(&config, sequential_input(2)).await.unwrap(), "id"),
-        "pmtest-2"
+        "id-2"
     );
     std::fs::write(Path::new(&config.workspace).join("modify-after-rename"), "").unwrap();
     let conflict = create(&config, sequential_input(3)).await.unwrap_err();
     assert!(conflict.contains("已被更新"), "{conflict}");
-    let changed = show(&config, "pmtest-3").await.unwrap();
+    let changed = show(&config, "id-3").await.unwrap();
     assert_eq!(string(&changed, "status"), "blocked");
     assert_eq!(string(&changed, "description"), "External revision");
     assert!(create(&config, sequential_input(3)).await.is_err());
     assert_eq!(
-        string(&show(&config, "pmtest-3").await.unwrap(), "status"),
+        string(&show(&config, "id-3").await.unwrap(), "status"),
         "blocked"
     );
     println!("PASS actual competing CLI collision and post-rename edits are preserved");
+}
+
+#[tokio::test]
+#[ignore = "fresh temporary BD workspace; shared typed sequences and hierarchy"]
+async fn typed_sequences_share_workspace_and_preserve_ids() {
+    let config = test_workspace_prefix("p2").await;
+    run(
+        &config,
+        &args(&["config", "set", "status.custom", "parked:wip"]),
+        true,
+    )
+    .await
+    .unwrap();
+    let mut project = sequential_input(101);
+    project.issue_type = "epic".into();
+    project.status = "open".into();
+    project.labels = vec!["area:synthetic".into()];
+    let p = create(&config, project.clone()).await.unwrap();
+    assert_eq!(p["id"], "proj-1");
+    let mut milestone = sequential_input(102);
+    milestone.issue_type = "milestone".into();
+    milestone.parent = "proj-1".into();
+    let m = create(&config, milestone.clone()).await.unwrap();
+    assert_eq!(m["id"], "milestone-1");
+    assert_eq!(parent_id(&m), "proj-1");
+    assert_eq!(sorted_labels(&m), vec!["area:synthetic"]);
+    assert_eq!(
+        create(&config, milestone.clone()).await.unwrap()["id"],
+        "milestone-1"
+    );
+    for field in [
+        "issue_type",
+        "priority",
+        "parent",
+        "assignee",
+        "labels",
+        "status",
+    ] {
+        let mut changed = milestone.clone();
+        match field {
+            "issue_type" => changed.issue_type = "task".into(),
+            "priority" => changed.priority = 1,
+            "parent" => changed.parent = "".into(),
+            "assignee" => changed.assignee = "someone".into(),
+            "labels" => changed.labels.push("new-label".into()),
+            "status" => changed.status = "open".into(),
+            _ => unreachable!(),
+        }
+        assert!(
+            create(&config, changed).await.is_err(),
+            "changed {field} accepted"
+        );
+    }
+    let mut nested_epic = sequential_input(103);
+    nested_epic.issue_type = "epic".into();
+    nested_epic.parent = "proj-1".into();
+    assert_eq!(
+        create(&config, nested_epic).await.unwrap()["id"],
+        "milestone-2"
+    );
+    let mut standalone = sequential_input(104);
+    standalone.issue_type = "milestone".into();
+    assert_eq!(
+        create(&config, standalone).await.unwrap()["id"],
+        "milestone-3"
+    );
+    for (n, kind) in [
+        "task", "bug", "feature", "chore", "decision", "spike", "story",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let mut ticket = sequential_input(200 + n as u32);
+        ticket.issue_type = (*kind).into();
+        ticket.parent = "milestone-1".into();
+        ticket.priority = 1;
+        ticket.assignee = "test-owner".into();
+        ticket.labels = vec!["own-label".into()];
+        ticket.status = "parked".into();
+        let saved = create(&config, ticket.clone()).await.unwrap();
+        assert_eq!(saved["id"], format!("id-{}", n + 1));
+        assert_eq!(parent_id(&saved), "milestone-1");
+        assert_eq!(saved["status"], "parked");
+        assert_eq!(saved["assignee"], "test-owner");
+        assert_eq!(sorted_labels(&saved), vec!["area:synthetic", "own-label"]);
+        assert_eq!(create(&config, ticket).await.unwrap()["id"], saved["id"]);
+    }
+    // Conversions and reparenting keep stable references, even when the new role differs.
+    run(
+        &config,
+        &args(&[
+            "update", "id-7", "--type", "epic", "--parent", "", "--status", "open",
+        ]),
+        true,
+    )
+    .await
+    .unwrap();
+    assert_eq!(show(&config, "id-7").await.unwrap()["issue_type"], "epic");
+    assert_eq!(
+        create(&config, sequential_input(301)).await.unwrap()["id"],
+        "id-8"
+    );
+    let mut another_project = sequential_input(302);
+    another_project.issue_type = "epic".into();
+    assert_eq!(
+        create(&config, another_project).await.unwrap()["id"],
+        "proj-2"
+    );
+    let mut child = sequential_input(303);
+    child.parent = "proj-2".into();
+    assert_eq!(create(&config, child).await.unwrap()["id"], "id-9");
+    let mut missing = sequential_input(304);
+    missing.parent = "proj-".into();
+    assert!(create(&config, missing).await.is_err());
+    assert_eq!(
+        create(&config, sequential_input(305)).await.unwrap()["id"],
+        "id-10"
+    );
+    // A historic UUID receipt remains valid without migration.
+    let legacy_input = sequential_input(401);
+    let legacy_id = format!("p2-{}", legacy_input.operation.replace('-', ""));
+    run(
+        &config,
+        &args(&[
+            "create",
+            "--id",
+            &legacy_id,
+            "--title",
+            &legacy_input.title,
+            "--description",
+            &legacy_input.description,
+            "--type",
+            "task",
+            "--priority",
+            "2",
+            "--repo",
+            ".",
+        ]),
+        true,
+    )
+    .await
+    .unwrap();
+    run(
+        &config,
+        &args(&["update", &legacy_id, "--status", "idea"]),
+        true,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        create(&config, legacy_input).await.unwrap()["id"],
+        legacy_id
+    );
+    println!(
+        "PASS typed workspace sequences, child IDs, inherited labels, retries and legacy receipts"
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+#[ignore = "fresh temporary BD workspace; lost retry receipt and incomplete parent edge"]
+async fn missing_receipt_or_parent_never_reports_success() {
+    use std::os::unix::fs::PermissionsExt;
+    let mut config = test_workspace().await;
+    let first = sequential_input(701);
+    create(&config, first.clone()).await.unwrap();
+    let mut project = sequential_input(702);
+    project.issue_type = "epic".into();
+    create(&config, project).await.unwrap();
+    let wrapper = Path::new(&config.workspace).join("race-bd");
+    let binary = serde_json::to_string(&config.executable).unwrap();
+    std::fs::write(&wrapper, format!(r#"#!/usr/bin/env python3
+import os, subprocess, sys
+from pathlib import Path
+binary = {binary}
+args = sys.argv[1:]
+if 'show' in args and args[-1] == 'id-1' and not Path('receipt-removed').exists():
+    Path('receipt-removed').touch()
+    subprocess.run([binary, '--sandbox', '--json', 'update', 'id-1', '--unset-metadata', 'pm_create', '--title', 'External replacement'], check=True, stdout=subprocess.DEVNULL)
+if 'create' in args and '--deps' in args:
+    pos = args.index('--deps')
+    del args[pos:pos+2]
+os.execv(binary, [binary, *args])
+"#)).unwrap();
+    std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o700)).unwrap();
+    config.executable = wrapper.to_string_lossy().into();
+    let error = create(&config, first).await.unwrap_err();
+    assert!(error.contains("回执已被修改"), "{error}");
+    assert_eq!(
+        show(&config, "id-1").await.unwrap()["title"],
+        "External replacement"
+    );
+    let mut child = sequential_input(703);
+    child.parent = "proj-1".into();
+    assert!(create(&config, child.clone())
+        .await
+        .unwrap_err()
+        .contains("已被更新"));
+    let temporary = format!("pmtest-{}", child.operation.replace('-', ""));
+    let partial = show(&config, &temporary).await.unwrap();
+    assert_eq!(parent_id(&partial), "");
+    assert_eq!(partial["status"], "open");
+    assert!(show(&config, "id-2").await.is_err());
+    assert!(create(&config, child).await.is_err());
+    assert_eq!(
+        snapshot(&config).await.unwrap()["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
+    println!("PASS removed receipt and missing parent edge stop before further mutation");
 }

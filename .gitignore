@@ -65,3 +65,6 @@ next-env.d.ts
 
 # Local desktop configuration may contain user paths.
 desktop.json
+
+/crates/*/target/
+/.mini-run/

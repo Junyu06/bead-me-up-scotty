@@ -1,5 +1,7 @@
 # Scotty application guide
 
+This fork uses [typed sequential IDs](../crates/beads-core/README.md) for new records. Outside Docker, run `npm run build:creator` with Rust/Cargo or install the current Beads PM app on macOS before creating records. `BEADS_CREATE_BIN` can point to the standalone helper. The source build is discovered from this checkout; packaged installs on other platforms must place `beads-create` on PATH or set that variable.
+
 This guide covers the existing Scotty application at the repository root. For the Beads PM preview, see the [repository overview](../README.md) and [PM guide](../pm-client/README.md).
 
 ## Personal fork

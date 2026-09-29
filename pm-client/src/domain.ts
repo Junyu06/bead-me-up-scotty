@@ -318,15 +318,21 @@ export function createIdeaExample(
   description: string,
 ): Snapshot {
   if (!title.trim()) return snapshot;
-  let sequence = snapshot.items.length + 1;
-  while (snapshot.items.some((item) => item.id === `demo-idea-${sequence}`))
-    sequence++;
+  const sequence =
+    1 +
+    Math.max(
+      0,
+      ...snapshot.items.map((item) => {
+        const match = /^id-(\d+)$/.exec(item.id);
+        return match ? Number(match[1]) : 0;
+      }),
+    );
   return {
     ...snapshot,
     items: [
       ...snapshot.items,
       {
-        id: `demo-idea-${sequence}`,
+        id: `id-${sequence}`,
         title: title.trim(),
         description,
         role: "ticket",
