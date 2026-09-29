@@ -31,12 +31,13 @@ fn fingerprint_detects_same_second_changes_and_validation_rejects_flags() {
     ));
 }
 
-#[tokio::test]
-#[ignore = "creates a fresh temporary BD workspace; requires installed BD and Git"]
-async fn isolated_round_trip() {
+async fn test_workspace() -> Config {
+    static NEXT_WORKSPACE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let root = std::env::temp_dir().join(format!(
-        "beads-pm-test-{}",
-        chrono::Utc::now().timestamp_nanos_opt().unwrap()
+        "beads-pm-test-{}-{}-{}",
+        std::process::id(),
+        chrono::Utc::now().timestamp_nanos_opt().unwrap(),
+        NEXT_WORKSPACE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     std::fs::create_dir_all(&root).unwrap();
     for argv in [
@@ -69,14 +70,20 @@ async fn isolated_round_trip() {
         "{}",
         String::from_utf8_lossy(&init.stderr)
     );
-    let config = connect(Config {
+    connect(Config {
         workspace: root.to_string_lossy().into(),
         executable,
         actor: "pm-test".into(),
         identity: String::new(),
     })
     .await
-    .unwrap();
+    .unwrap()
+}
+
+#[tokio::test]
+#[ignore = "creates a fresh temporary BD workspace; requires installed BD and Git"]
+async fn isolated_round_trip() {
+    let config = test_workspace().await;
     let op = "00000000-0000-4000-8000-000000000001";
     let make = || Create {
         title: "A title with $(literal) and `text`".into(),
@@ -85,6 +92,7 @@ async fn isolated_round_trip() {
     };
     let created = create(&config, make()).await.unwrap();
     let id = string(&created, "id").to_owned();
+    assert_eq!(id, "pmtest-1", "new tickets need a short sequential ID");
     assert_eq!(string(&created, "status"), "idea");
     assert_eq!(string(&create(&config, make()).await.unwrap(), "id"), id);
     let old = show(&config, &id).await.unwrap();
@@ -246,5 +254,250 @@ async fn isolated_round_trip() {
     .await
     .unwrap();
     assert!(snapshot(&config).await.unwrap_err().contains("路由"));
-    println!("PASS isolated BD round trip: {}", root.display());
+    println!("PASS isolated BD round trip");
+}
+
+fn sequential_input(n: u32) -> Create {
+    Create {
+        title: format!("Synthetic ticket {n}"),
+        description: "Sequence test".into(),
+        operation: format!("11111111-1111-4111-8111-{n:012}"),
+    }
+}
+
+#[test]
+fn sequences_ignore_hashes_and_children_and_detect_overflow() {
+    for prefix in ["sample", "p-2", "sample-project"] {
+        assert!(supports_sequential_prefix(prefix));
+    }
+    for prefix in ["", "p2", "UPPER", "123", "bad prefix"] {
+        assert!(!supports_sequential_prefix(prefix));
+    }
+    let rows = vec![
+        json!({"id":"sample-3"}),
+        json!({"id":"sample-ab12"}),
+        json!({"id":"sample-3.5"}),
+        json!({"id":"other-99"}),
+    ];
+    assert_eq!(next_creation_number("sample", &rows, 0).unwrap(), 4);
+    assert_eq!(next_creation_number("sample", &rows, 10).unwrap(), 11);
+    assert!(next_creation_number("sample", &rows, u64::MAX).is_err());
+    let input = sequential_input(1);
+    let receipt = json!({"id":"sample-1","title":input.title,"description":input.description,
+        "issue_type":"task","status":"idea","metadata":{"pm_create":{"operation":input.operation}}});
+    assert!(creation_receipt(&[receipt.clone(), receipt], "sample", &input).is_err());
+}
+
+#[tokio::test]
+#[ignore = "fresh temporary BD workspace; real sequential creation and process locks"]
+async fn sequential_creation_and_process_lock() {
+    let config = test_workspace().await;
+    for n in 1..=3 {
+        let item = create(&config, sequential_input(n)).await.unwrap();
+        assert_eq!(string(&item, "id"), format!("pmtest-{n}"));
+        assert_eq!(string(&item, "status"), "idea");
+    }
+    assert_eq!(
+        string(&create(&config, sequential_input(1)).await.unwrap(), "id"),
+        "pmtest-1"
+    );
+    let mut changed = sequential_input(1);
+    changed.title = "Different content on retry".into();
+    assert!(create(&config, changed).await.is_err());
+    let root = Path::new(&config.workspace);
+    std::fs::write(
+        root.join("worker.json"),
+        serde_json::to_vec(&config).unwrap(),
+    )
+    .unwrap();
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(root.join(".beads/pm-create.lock"))
+        .unwrap();
+    lock.try_lock().unwrap();
+    // A second OS process must stop before reading or reserving another number.
+    let worker = |expected: &str| {
+        clean_command(std::env::current_exe().unwrap().to_str().unwrap())
+            .args([
+                "--exact",
+                "bd::tests::creation_process_worker",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env("PM_TEST_SEQUENCE_DIR", root)
+            .env("PM_TEST_SEQUENCE_EXPECT", expected)
+            .output()
+            .unwrap()
+    };
+    let blocked = worker("busy");
+    assert!(
+        blocked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&blocked.stdout)
+    );
+    drop(lock);
+    let saved = worker("pmtest-4");
+    assert!(
+        saved.status.success(),
+        "{}",
+        String::from_utf8_lossy(&saved.stdout)
+    );
+    let retry = worker("pmtest-4");
+    assert!(
+        retry.status.success(),
+        "{}",
+        String::from_utf8_lossy(&retry.stdout)
+    );
+    // Deleting only this confirmed exact ID in the disposable test database
+    // must not make its number available again.
+    assert_eq!(
+        string(&show(&config, "pmtest-4").await.unwrap(), "id"),
+        "pmtest-4"
+    );
+    run(&config, &args(&["delete", "pmtest-4", "--force"]), true)
+        .await
+        .unwrap();
+    assert_eq!(
+        string(&create(&config, sequential_input(5)).await.unwrap(), "id"),
+        "pmtest-5"
+    );
+    println!("PASS sequential IDs, retries, separate process lock and deletion high-water mark");
+}
+
+#[tokio::test]
+#[ignore = "child-process helper, launched by sequential_creation_and_process_lock"]
+async fn creation_process_worker() {
+    let Ok(dir) = std::env::var("PM_TEST_SEQUENCE_DIR") else {
+        return;
+    };
+    assert!(Path::new(&dir)
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .starts_with("beads-pm-test-"));
+    let config: Config =
+        serde_json::from_slice(&std::fs::read(Path::new(&dir).join("worker.json")).unwrap())
+            .unwrap();
+    assert_eq!(config.workspace, dir);
+    let expected = std::env::var("PM_TEST_SEQUENCE_EXPECT").unwrap();
+    let result = create(&config, sequential_input(4)).await;
+    if expected == "busy" {
+        assert!(result.unwrap_err().contains("正在创建另一张"));
+    } else {
+        assert_eq!(string(&result.unwrap(), "id"), expected);
+    }
+}
+
+#[tokio::test]
+#[ignore = "fresh temporary BD workspace; checks native counter coexistence"]
+async fn native_counter_mode_stops_before_creation() {
+    let config = test_workspace().await;
+    run(
+        &config,
+        &args(&["config", "set", "issue_id_mode", "counter"]),
+        true,
+    )
+    .await
+    .unwrap();
+    let initial = run(
+        &config,
+        &args(&["create", "--title", "Native first", "--repo", "."]),
+        true,
+    )
+    .await
+    .unwrap();
+    assert_eq!(string(&initial, "id"), "pmtest-1");
+    let failure = create(&config, sequential_input(23)).await.unwrap_err();
+    assert!(failure.contains("counter"), "{failure}");
+    let snap = snapshot(&config).await.unwrap();
+    assert_eq!(snap["items"].as_array().unwrap().len(), 1);
+    for key in ["pm.sequence.pmtest", "status.custom"] {
+        let value = run(&config, &args(&["config", "get", key]), false)
+            .await
+            .unwrap();
+        assert!(string(&value, "value").is_empty(), "guard changed {key}");
+    }
+    let mode = run(&config, &args(&["config", "get", "issue_id_mode"]), false)
+        .await
+        .unwrap();
+    assert_eq!(string(&mode, "value"), "counter");
+    let next = run(
+        &config,
+        &args(&["create", "--title", "Native next", "--repo", "."]),
+        true,
+    )
+    .await
+    .unwrap();
+    assert_eq!(string(&next, "id"), "pmtest-2");
+    assert_eq!(
+        string(&show(&config, "pmtest-1").await.unwrap(), "title"),
+        "Native first"
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+#[ignore = "fresh temporary BD workspace; injects a real external ID collision"]
+async fn sequence_collision_preserves_both_records() {
+    use std::os::unix::fs::PermissionsExt;
+    let mut config = test_workspace().await;
+    let root = Path::new(&config.workspace);
+    let wrapper = root.join("collision-bd");
+    let binary = serde_json::to_string(&config.executable).unwrap();
+    // The wrapper changes one thing: an unrelated writer takes the destination
+    // immediately before rename. All operations still use the real BD CLI.
+    std::fs::write(&wrapper, format!(r#"#!/usr/bin/env python3
+import os, subprocess, sys
+from pathlib import Path
+binary = {binary}
+args = sys.argv[1:]
+if 'rename' in args:
+    pos = args.index('rename')
+    if len(args) > pos + 2 and not Path('collision-injected').exists():
+        Path('collision-injected').touch()
+        subprocess.run([binary, '--sandbox', '--json', 'create', '--id', args[pos+2], '--title', 'External record must survive', '--repo', '.'], check=True, stdout=subprocess.DEVNULL)
+    if len(args) > pos + 2 and Path('modify-after-rename').exists():
+        result = subprocess.run([binary, *args])
+        if result.returncode == 0:
+            subprocess.run([binary, '--sandbox', '--json', 'update', args[pos+2], '--status', 'blocked', '--description', 'External revision'], check=True, stdout=subprocess.DEVNULL)
+        sys.exit(result.returncode)
+os.execv(binary, [binary, *args])
+"#)).unwrap();
+    std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o700)).unwrap();
+    config.executable = wrapper.to_string_lossy().into();
+    let failed = create(&config, sequential_input(1)).await.unwrap_err();
+    assert!(failed.contains("编号 pmtest-1 尚未确认"), "{failed}");
+    let other = show(&config, "pmtest-1").await.unwrap();
+    assert_eq!(string(&other, "title"), "External record must survive");
+    assert!(other.pointer("/metadata/pm_create").is_none());
+    let temporary = "pmtest-11111111111141118111000000000001";
+    let ours = show(&config, temporary).await.unwrap();
+    assert_eq!(string(&ours, "title"), "Synthetic ticket 1");
+    assert!(create(&config, sequential_input(1))
+        .await
+        .unwrap_err()
+        .contains("短编号尚未完成"));
+    assert_eq!(
+        string(&show(&config, "pmtest-1").await.unwrap(), "title"),
+        "External record must survive"
+    );
+    let snap = snapshot(&config).await.unwrap();
+    assert_eq!(snap["items"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        string(&create(&config, sequential_input(2)).await.unwrap(), "id"),
+        "pmtest-2"
+    );
+    std::fs::write(Path::new(&config.workspace).join("modify-after-rename"), "").unwrap();
+    let conflict = create(&config, sequential_input(3)).await.unwrap_err();
+    assert!(conflict.contains("已被更新"), "{conflict}");
+    let changed = show(&config, "pmtest-3").await.unwrap();
+    assert_eq!(string(&changed, "status"), "blocked");
+    assert_eq!(string(&changed, "description"), "External revision");
+    assert!(create(&config, sequential_input(3)).await.is_err());
+    assert_eq!(
+        string(&show(&config, "pmtest-3").await.unwrap(), "status"),
+        "blocked"
+    );
+    println!("PASS actual competing CLI collision and post-rename edits are preserved");
 }

@@ -153,6 +153,11 @@ pub async fn run(config: &Config, args: &[String], write: bool) -> Result<Value>
             message.chars().take(1200).collect::<String>()
         ));
     }
+    // BD 1.2.2 emits text for rename even with --json. Its caller must
+    // verify the destination record after a successful exit.
+    if args.first().is_some_and(|arg| arg == "rename") {
+        return Ok(Value::Null);
+    }
     let raw: Value = serde_json::from_slice(&out)
         .map_err(|_| "BD 返回了无法解析的数据；请刷新核对操作结果。")?;
     if raw.get("error").is_some() {
@@ -290,12 +295,13 @@ async fn routing_guard(config: &Config, context: &Value) -> Result<()> {
     }
     Ok(())
 }
-async fn check_context(config: &Config) -> Result<()> {
+async fn check_context(config: &Config) -> Result<Value> {
     let context = run(config, &args(&["context"]), false).await?;
     if string(&context, "dolt_mode") != "embedded" || identity(&context)? != config.identity {
         return Err("工作区的数据库位置已改变，请重新连接。".into());
     }
-    routing_guard(config, &context).await
+    routing_guard(config, &context).await?;
+    Ok(context)
 }
 pub async fn snapshot(config: &Config) -> Result<Value> {
     check_context(config).await?;
@@ -512,6 +518,106 @@ pub async fn patch(config: &Config, patch: Patch) -> Result<Value> {
     Ok(after)
 }
 
+// A separate receipt keeps retries stable while the public ID stays readable.
+fn creation_receipt<'a>(
+    items: &'a [Value],
+    prefix: &str,
+    input: &Create,
+) -> Result<Option<&'a Value>> {
+    let legacy = format!("{prefix}-{}", input.operation.replace('-', ""));
+    let found: Vec<_> = items
+        .iter()
+        .filter(|item| {
+            string(item, "id") == legacy
+                || item
+                    .pointer("/metadata/pm_create/operation")
+                    .and_then(Value::as_str)
+                    == Some(input.operation.as_str())
+        })
+        .collect();
+    if found.len() > 1 {
+        return Err("同一次创建对应多张工单，请先核对，未新建工单。".into());
+    }
+    let Some(item) = found.first().copied() else {
+        return Ok(None);
+    };
+    let id = string(item, "id");
+    if string(item, "title") != input.title.trim()
+        || string(item, "description") != input.description
+        || string(item, "issue_type") != "task"
+    {
+        return Err(format!(
+            "上次创建的工单是 {id}。请先打开核对，不要用同一操作创建不同内容。"
+        ));
+    }
+    if item
+        .pointer("/metadata/pm_create/target")
+        .and_then(Value::as_str)
+        .is_some_and(|target| target != id)
+    {
+        return Err(format!(
+            "工单 {id} 已创建，但短编号尚未完成。请先打开核对；不会重复创建。"
+        ));
+    }
+    if string(item, "status") != "idea" {
+        return Err(format!(
+            "上次已创建 {id}，当前状态为 {}。请打开核对；不会重复创建。",
+            string(item, "status")
+        ));
+    }
+    Ok(Some(item))
+}
+
+fn next_creation_number(prefix: &str, items: &[Value], reserved: u64) -> Result<u64> {
+    let prefix = format!("{prefix}-");
+    let largest = items
+        .iter()
+        .filter_map(|item| {
+            let suffix = string(item, "id").strip_prefix(&prefix)?;
+            // Hashes and dotted child IDs do not belong to the sequential series.
+            if suffix.is_empty() || !suffix.bytes().all(|c| c.is_ascii_digit()) {
+                return None;
+            }
+            suffix.parse::<u64>().ok()
+        })
+        .max()
+        .unwrap_or(0);
+    largest
+        .max(reserved)
+        .checked_add(1)
+        .ok_or_else(|| "工单编号已超出范围。".into())
+}
+
+fn supports_sequential_prefix(prefix: &str) -> bool {
+    valid_id(prefix)
+        && prefix
+            .split('-')
+            .next()
+            .is_some_and(|first| !first.is_empty() && first.bytes().all(|c| c.is_ascii_lowercase()))
+}
+
+fn check_pending_creation(item: &Value, input: &Create, target: &str) -> Result<()> {
+    if item
+        .pointer("/metadata/pm_create/operation")
+        .and_then(Value::as_str)
+        != Some(input.operation.as_str())
+        || item
+            .pointer("/metadata/pm_create/target")
+            .and_then(Value::as_str)
+            != Some(target)
+        || string(item, "title") != input.title.trim()
+        || string(item, "description") != input.description
+        || string(item, "status") != "open"
+        || string(item, "issue_type") != "task"
+    {
+        return Err(format!(
+            "工单 {} 已被更新，请刷新核对；未继续修改。",
+            string(item, "id")
+        ));
+    }
+    Ok(())
+}
+
 pub async fn create(config: &Config, input: Create) -> Result<Value> {
     operation(&input.operation)?;
     if input.title.trim().is_empty()
@@ -522,12 +628,24 @@ pub async fn create(config: &Config, input: Create) -> Result<Value> {
     {
         return Err("标题或描述无效。".into());
     }
-    check_context(config).await?;
+    let context = check_context(config).await?;
+    // OS locking is released on exit, including crashes. No database file is
+    // opened here. All client instances sharing this workspace use this lock.
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .read(true)
+        .append(true)
+        .open(Path::new(string(&context, "beads_dir")).join("pm-create.lock"))
+        .map_err(|e| format!("无法锁定工单编号：{e}"))?;
+    lock.try_lock()
+        .map_err(|_| "正在创建另一张工单，请稍后重试。")?;
     let prefix = run(config, &args(&["config", "get", "issue_prefix"]), false).await?;
     let prefix = string(&prefix, "value");
     check_id(prefix)?;
-    let id = format!("{prefix}-{}", input.operation.replace('-', ""));
-    let existing = records(
+    if !supports_sequential_prefix(prefix) {
+        return Err(format!("当前 BD 不支持为前缀 {prefix} 分配顺序编号；第一个连字符前必须是小写字母。未创建工单。"));
+    }
+    let items = records(
         run(
             config,
             &args(&[
@@ -542,24 +660,16 @@ pub async fn create(config: &Config, input: Create) -> Result<Value> {
             false,
         )
         .await?,
-    )?
-    .into_iter()
-    .find(|v| string(v, "id") == id);
-    if let Some(item) = existing {
-        if string(&item, "title") != input.title.trim()
-            || string(&item, "description") != input.description
-        {
-            return Err(format!(
-                "上次创建的工单是 {id}。请先打开核对，不要用同一操作创建不同内容。"
-            ));
-        }
-        if string(&item, "status") != "idea" {
-            return Err(format!(
-                "上次已创建 {id}，当前状态为 {}。请打开核对；不会重复创建。",
-                string(&item, "status")
-            ));
-        }
-        return Ok(item);
+    )?;
+    if let Some(item) = creation_receipt(&items, prefix, &input)? {
+        return Ok(item.clone());
+    }
+    let mode = run(config, &args(&["config", "get", "issue_id_mode"]), false).await?;
+    if string(&mode, "value")
+        .trim()
+        .eq_ignore_ascii_case("counter")
+    {
+        return Err("工作区已启用 BD 的 counter 编号模式，当前客户端无法与它安全共用顺序编号。未创建工单，工作区配置未改动。".into());
     }
     let custom = run(config, &args(&["config", "get", "status.custom"]), false).await?;
     let value = string(&custom, "value");
@@ -582,12 +692,36 @@ pub async fn create(config: &Config, input: Create) -> Result<Value> {
         )
         .await?;
     }
+    // Fail before creation on BD versions without the safe rename command.
+    run(config, &args(&["rename", "--help"]), false).await?;
+    // Reserve before creating. The high-water mark survives permanent deletion;
+    // a failed/uncertain create may leave a gap, but never recycles its number.
+    let counter_key = format!("pm.sequence.{prefix}");
+    let counter = run(config, &args(&["config", "get", &counter_key]), false).await?;
+    let raw = string(&counter, "value");
+    let reserved = if raw.is_empty() {
+        0
+    } else {
+        raw.parse::<u64>()
+            .map_err(|_| "工单编号记录无效，未新建工单。")?
+    };
+    let number = next_creation_number(prefix, &items, reserved)?;
+    let id = format!("{prefix}-{number}");
+    check_id(&id)?;
     run(
+        config,
+        &args(&["config", "set", &counter_key, &number.to_string()]),
+        true,
+    )
+    .await?;
+    let temporary = format!("{prefix}-{}", input.operation.replace('-', ""));
+    let receipt = json!({"pm_create":{"operation":input.operation,"target":id}}).to_string();
+    if let Err(error) = run(
         config,
         &args(&[
             "create",
             "--id",
-            &id,
+            &temporary,
             "--title",
             input.title.trim(),
             "--description",
@@ -596,16 +730,49 @@ pub async fn create(config: &Config, input: Create) -> Result<Value> {
             "task",
             "--priority",
             "2",
+            "--metadata",
+            &receipt,
             "--repo",
             ".",
         ]),
         true,
     )
-    .await?;
+    .await
+    {
+        return Err(format!(
+            "工单 {temporary} 的创建结果尚未确认。请刷新核对后重试。{error}"
+        ));
+    }
+    // create --id can UPSERT an occupied ID in BD 1.2.2. Create only at the
+    // operation UUID, then use rename's transactional destination-exists check.
+    // A collision leaves both records intact and must not be replayed blindly.
+    let before = show(config, &temporary).await?;
+    check_pending_creation(&before, &input, &id)?;
+    if let Err(error) = run(config, &args(&["rename", &temporary, &id]), true).await {
+        return Err(format!("工单已创建，但编号 {id} 尚未确认。请刷新查看 {temporary} 或 {id}；不要另建一张。{error}"));
+    }
+    let renamed = show(config, &id).await?;
+    check_pending_creation(&renamed, &input, &id)?;
     if let Err(e) = run(config, &args(&["update", &id, "--status", "idea"]), true).await {
         return Err(format!("工单 {id} 已创建，但 Idea 状态尚未确认。{e}"));
     }
-    show(config, &id).await
+    let saved = show(config, &id).await?;
+    if string(&saved, "id") != id
+        || saved
+            .pointer("/metadata/pm_create/operation")
+            .and_then(Value::as_str)
+            != Some(input.operation.as_str())
+        || creation_receipt(std::slice::from_ref(&saved), prefix, &input)?.is_none()
+        || saved
+            .pointer("/metadata/pm_create/target")
+            .and_then(Value::as_str)
+            != Some(id.as_str())
+    {
+        return Err(format!(
+            "工单 {id} 的创建结果与本次提交不一致，请刷新核对。"
+        ));
+    }
+    Ok(saved)
 }
 
 async fn check_close_scope(config: &Config, item: &Value) -> Result<()> {

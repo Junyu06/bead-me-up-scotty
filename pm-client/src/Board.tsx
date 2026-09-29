@@ -159,7 +159,7 @@ export function Board({
                       </span>
                     )}
                     <span className="card-footer">
-                      <code>{item.id}</code>
+                      <code title={item.id}>{item.id}</code>
                       <span className="priority">P{item.priority}</span>
                     </span>
                     <span className="card-bottom">

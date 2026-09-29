@@ -1,6 +1,6 @@
 # Beads desktop contract
 
-Updated 2026-09-27 after the user selected an existing local workspace for real use. The native Tauri app uses typed Rust commands to call BD 1.2.2. The browser remains the synthetic UI preview. A failed native connection never selects fixtures.
+Updated 2026-09-29 with sequential ticket IDs and creation recovery checks. The native Tauri app uses typed Rust commands to call BD 1.2.2. The browser remains the synthetic UI preview. A failed native connection never selects fixtures.
 
 ## Workspace and transport
 
@@ -34,7 +34,15 @@ Opening a detail uses `show`, with a SHA-256 fingerprint of its returned record.
 
 BD does not expose compare-and-swap for these edits. Another process can write after the last check, and a single `update` may apply fields and labels in separate steps. The client cannot promise atomic writes or rollbacks. A mismatch, timeout or partial failure preserves the UI draft and asks for inspection; it does not automatically replay a write.
 
-New tickets use an explicit operation-derived ID, then transition to configured `idea:wip`. The transition is a second CLI write. If it fails, the error reports the created ID. A retry with the same operation never creates a second ticket; an existing ticket in another state is reported for inspection. Creation retry tokens persist for that open form; restarting the app does not restore unfinished form drafts.
+New tickets use the workspace prefix plus a positive decimal sequence (`sample-1`, `sample-2`, …). Existing records keep their IDs, including IDs generated outside this client. A UUID operation receipt in `metadata.pm_create` is separate from the final ID. The receipt also stores the intended target ID. Retries search the complete list for this receipt (and recognize the former UUID-based IDs); multiple matches, changed contents, a different status or an unfinished rename stop for inspection. Creation tokens persist for the open form; restarting the app does not restore unfinished drafts.
+
+The client holds an OS file lock at the canonical Beads directory's `pm-create.lock` for the entire creation sequence. A crash releases the lock; another client process reports busy before reserving a number. The high-water mark lives in BD configuration at `pm.sequence.<prefix>` and is advanced before creation. Existing exact numeric IDs also bound the next number. Deleted or failed reservations are not recycled, so failures can leave gaps. Other CLI processes do not obey this application lock.
+
+BD 1.2.2's explicit `create --id` can replace an existing record; its native counter mode was also observed to select an occupied explicit numeric ID. The client leaves the global ID mode unchanged and refuses new creation when `issue_id_mode=counter`: renaming to a numeric ID does not advance BD's native counter, so a subsequent external create could overwrite it. The configured prefix must also satisfy BD's rename syntax (its first hyphen-separated segment must contain only lowercase ASCII letters). These checks stop before reserving a number or creating a record. It creates only at the operation UUID, verifies the new record, and uses native `rename` to claim the reserved short ID. Rename changes the primary key in a database transaction, which rejects an occupied destination. BD also updates text references in a later pass; the client only renames its just-created record, never existing user records. The rename command emits text even with `--json`; a successful exit is followed by exact-ID readback and receipt/content/state checks before the separate `idea:wip` transition.
+
+An occupied destination, timeout or partial failure stops the workflow; it does not overwrite the destination, choose another ID automatically or create a duplicate on retry. Both the existing record and any newly created temporary record remain available for inspection. If numbering or the Idea transition remains incomplete, the error identifies the relevant IDs. These steps are not one transaction, and unrelated edits can still race a final read/write boundary.
+
+This allocator applies to the client's ticket-creation entry point. External AI/CLI project creation keeps its existing behavior; configuring a separate project ID series requires that creation workflow to adopt an allocator too.
 
 ## Closing and reopening
 

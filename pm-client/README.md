@@ -6,7 +6,7 @@ A Mac client for a local Beads workspace, developed in the [Scotty fork](../READ
 
 ## Build and open
 
-Requires Node.js 22.12+, npm, Rust/Cargo and the Xcode command-line tools. BD 1.2.2 with an embedded Dolt workspace is the tested data backend.
+Requires Node.js 22.12+, npm, Rust 1.89+/Cargo and the Xcode command-line tools. BD 1.2.2 with an embedded Dolt workspace is the tested data backend.
 
 From the repository root:
 
@@ -22,12 +22,14 @@ The app embeds its frontend. It has its own identifier (`com.beads.pm`) and the 
 
 ## Daily use
 
-- New tickets start as independent Ideas. Edit their title, description, assignee, priority, status, parent, target date or manual plan in detail.
+- New tickets use sequential IDs under the workspace prefix (`sample-1`, `sample-2`, …), and start as independent Ideas. Edit their title, description, assignee, priority, status, parent, target date or manual plan in detail.
 - Board has completion windows and shared scope/search filters. Project progress includes historical tickets.
 - Need Me reads `human` requests as **待处理**. Explicit `pm:review`, `pm:decision` and `pm:action` labels distinguish review, decision and action requests. It does not infer acceptance from an assignee or an arbitrary human label.
 - Responses append BD notes and remove the answered request labels. Requesting changes returns a review ticket to `in_progress`; it retains the assignee. Closing and reopening act on the explicitly confirmed ticket. Parent auto-close flows are rejected.
 - Timeline separates target dates and manual plans, and offers date navigation. Map layout and view filters are local preferences; moving a node does not change its parent.
 - Lists refresh every 30 seconds and on window focus while no detail or creation form is open. Refresh errors retain the last view, disable writes and never substitute examples. Opening a detail reads it again; saving checks its content version and reads the result back.
+
+New creation requires a workspace without BD native counter mode and a prefix accepted by `bd rename` (lowercase ASCII letters before the first hyphen). Failed reservations can leave gaps. Existing IDs are not migrated.
 
 The app has no embedded AI chat or automatic project classification. Workspaces with redirection, remote servers or cross-workspace routing are not supported by this version. The CLI has no conditional-write transaction: an external writer can still race between the last read and the mutation. Partial or uncertain writes surface an error for inspection. The complete protocol and recovery limits are in [BD_CONTRACT.md](docs/BD_CONTRACT.md).
 
@@ -54,7 +56,7 @@ PM_BROWSER=webkit PM_TEST_URL=http://127.0.0.1:1420 npm run test:ui
 cargo test --manifest-path src-tauri/Cargo.toml -- --include-ignored --nocapture
 ```
 
-Playwright browsers must be installed through the root package (`npx playwright install chromium webkit`). Browser tests use examples or mocked IPC. The opt-in Rust test creates a fresh temporary Git/BD workspace and performs real CLI writes there. It never accepts a production workspace argument.
+Playwright browsers must be installed through the root package (`npx playwright install chromium webkit`). Browser tests use examples or mocked IPC. The opt-in Rust integration tests create fresh temporary Git/BD workspaces for real writes, process-lock checks and competing CLI mutations. Their subprocess helper is used only with those temporary workspaces.
 
 [Design](docs/DESIGN.md) · [Contract](docs/BD_CONTRACT.md) · [Verification](docs/PROGRESS.md) · [Plan](docs/PLAN.md)
 

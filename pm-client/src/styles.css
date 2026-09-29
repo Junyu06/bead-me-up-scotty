@@ -895,15 +895,21 @@ nav button.selected {
 }
 .card-footer {
   display: flex;
+  gap: 8px;
   align-items: center;
   justify-content: space-between;
   margin-top: 3px;
 }
 .card-footer code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
   color: var(--muted);
 }
 .priority {
+  flex-shrink: 0;
   font-size: 12px;
   color: var(--muted);
 }

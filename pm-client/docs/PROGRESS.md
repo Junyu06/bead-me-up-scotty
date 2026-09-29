@@ -1,6 +1,14 @@
 # Delivery and verification
 
-Updated 2026-09-27. The native app now connects to a selected local BD workspace. The browser keeps the UI-01 examples. Earlier preview verification is retained below as history.
+Updated 2026-09-29. The native app now connects to a selected local BD workspace. The browser keeps the UI-01 examples. Earlier preview verification is retained below as history.
+
+## Sequential ticket IDs
+
+The native creation path previously exposed the full retry UUID as the ticket ID. New client tickets now receive a workspace-prefixed sequential ID, while the retry receipt stays in metadata. Existing IDs are preserved; long legacy IDs fit within Board cards and remain available in full through the tooltip and detail view.
+
+The first real-CLI regression failed with a 32-digit UUID suffix instead of `pmtest-1`. The final tests cover 1/2/3 creation, repeat submissions, changed-content retries, a separate process holding the workspace lock, persistence across a new process and deletion of the highest ID. An adversarial CLI wrapper takes the destination immediately before rename; both records survive, and retry creates no duplicate. A second injection changes the new record after rename; its description and Blocked state are retained instead of being reset to Idea. Chromium/WebKit also reproduce and verify the legacy-ID layout fix. A native counter coexistence regression verifies refusal before any reservation or record write, preserving subsequent native creation. The numbering protocol, prefix compatibility and partial-failure handling are documented in BD_CONTRACT.md.
+
+The release arm64 app was built, its ad-hoc signature verified, and its installed binary matched the build. Through the native creation form, two synthetic tickets were saved as `sample-1` and `sample-2`; exact CLI readback confirmed both as Idea. The original workspace connection was then restored. Native verification used a disposable database in the macOS temporary directory because BD context rejects the initial `/private/tmp` location. Frontend tests passed 35/35 and Rust passed 7/7 (including the subprocess helper); lint, formatting, Chromium/WebKit UI checks and production packaging passed. Existing business records were not changed.
 
 ## Map ordering, containment and edge routing
 

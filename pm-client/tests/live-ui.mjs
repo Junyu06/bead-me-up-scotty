@@ -25,7 +25,7 @@ try {
     };
     let ticket = {
       ...project,
-      id: "test-task",
+      id: "test-0123456789abcdef0123456789abcdef",
       title: "Synthetic request",
       issue_type: "task",
       parent: project.id,
@@ -98,6 +98,28 @@ try {
   });
   await page.goto(base);
   assert.equal(await page.locator(".demo-badge").count(), 0);
+  await page
+    .locator("aside")
+    .getByRole("button", { name: "Board", exact: true })
+    .click();
+  const card = page
+    .locator(".ticket-card")
+    .filter({ hasText: "Synthetic request" });
+  const code = card.locator("code");
+  const codeBox = await code.boundingBox();
+  const priorityBox = await card.locator(".priority").boundingBox();
+  assert.ok(
+    codeBox.x + codeBox.width < priorityBox.x,
+    "legacy IDs must not overlap priority",
+  );
+  assert.equal(
+    await code.getAttribute("title"),
+    "test-0123456789abcdef0123456789abcdef",
+  );
+  await page
+    .locator("aside")
+    .getByRole("button", { name: "Projects", exact: true })
+    .click();
   await page.getByRole("button", { name: /Synthetic request/ }).click();
   const dialog = page.getByRole("dialog");
   await dialog.waitFor();
