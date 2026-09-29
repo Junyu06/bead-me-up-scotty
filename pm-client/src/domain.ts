@@ -23,6 +23,8 @@ export interface RecordItem {
   notes?: string;
   title: string;
   role: Role;
+  /** Native BD issue_type; absent in examples. */
+  issueType?: string;
   status: string;
   parent?: string;
   priority: number;
@@ -186,7 +188,8 @@ export function statusLabel(status: string): string {
     }[status] ?? status
   );
 }
-/** Direct children still open; BD refuses to close an epic that has any. */
+/** Direct children that are not closed. BD 1.2.2 refuses to close an epic
+ * (not a milestone or task) while any of these exist. */
 export function openChildren(id: string, index: Index): RecordItem[] {
   return (index.children.get(id) ?? []).filter((c) => c.status !== "closed");
 }

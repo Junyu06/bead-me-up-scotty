@@ -85,6 +85,7 @@ export function projectIssue(
     id: raw.id,
     title: raw.title,
     role,
+    issueType: raw.issue_type,
     status: raw.status,
     parent,
     priority: raw.priority,

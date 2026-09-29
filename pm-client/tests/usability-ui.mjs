@@ -9,6 +9,8 @@ const browser = await (
 try {
   const page = await browser.newPage({
     viewport: { width: 1280, height: 800 },
+    // Close dates render in local time; pin it so the expected date is fixed.
+    timezoneId: "UTC",
   });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -64,6 +66,34 @@ try {
         parent: "proj-3",
         labels: ["human"],
         notes: "Please look",
+      }),
+      row({
+        id: "milestone-1",
+        title: "Release gate",
+        issue_type: "milestone",
+        status: "open",
+        parent: "proj-3",
+      }),
+      row({
+        id: "id-4",
+        title: "Gate task",
+        issue_type: "task",
+        status: "open",
+        parent: "milestone-1",
+      }),
+      row({
+        id: "proj-4",
+        title: "Review line",
+        issue_type: "epic",
+        status: "in_progress",
+        labels: ["pm:review"],
+      }),
+      row({
+        id: "id-5",
+        title: "Review child",
+        issue_type: "task",
+        status: "open",
+        parent: "proj-4",
       }),
     ];
     let version = 0;
@@ -129,9 +159,48 @@ try {
   await dialog.waitFor();
   const close = dialog.getByRole("button", { name: "关闭工单", exact: true });
   assert.equal(await close.isDisabled(), true);
-  await dialog.getByText("还有 1 张子工单未关闭").waitFor();
+  await dialog.getByText("还有 1 个子项未关闭").waitFor();
   await dialog.getByRole("button", { name: "关闭详情", exact: true }).click();
   await dialog.waitFor({ state: "hidden" });
+
+  // A review request on such a project is held back the same way.
+  await page
+    .locator("aside")
+    .getByRole("button", { name: "Projects", exact: true })
+    .click();
+  await table.getByText("Review line", { exact: true }).click();
+  await page.getByRole("button", { name: "打开详情", exact: true }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.waitFor();
+  assert.equal(
+    await dialog.getByRole("button", { name: /通过并关闭/ }).isDisabled(),
+    true,
+  );
+  await dialog.getByText("还有 1 个子项未关闭").waitFor();
+  await dialog.getByRole("button", { name: "关闭详情", exact: true }).click();
+  await dialog.waitFor({ state: "hidden" });
+
+  // A native milestone may close with open children; BD only refuses epics.
+  await page
+    .locator("aside")
+    .getByRole("button", { name: "Board", exact: true })
+    .click();
+  await page.locator(".filter-toolbar select").first().selectOption("all");
+  await page
+    .getByRole("combobox", { name: "对象层级" })
+    .selectOption("milestone");
+  await page.locator(".ticket-card", { hasText: "Release gate" }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.waitFor();
+  assert.equal(
+    await dialog
+      .getByRole("button", { name: "关闭工单", exact: true })
+      .isDisabled(),
+    false,
+  );
+  await dialog.getByRole("button", { name: "关闭详情", exact: true }).click();
+  await dialog.waitFor({ state: "hidden" });
+  await page.getByRole("combobox", { name: "对象层级" }).selectOption("ticket");
 
   // Status changes without entering edit mode and sends only the status.
   await page

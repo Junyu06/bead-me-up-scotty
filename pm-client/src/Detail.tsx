@@ -85,15 +85,16 @@ export function Detail({
   const isDirty = JSON.stringify(draft) !== JSON.stringify(item);
   const blocked = blockers(item, index);
   const blockedNow = isBlocked(item, index);
-  // BD refuses to close an epic while any direct child is open.
+  // BD refuses to close an epic while any direct child is open; native
+  // milestones and tasks with open children can still be closed.
   const unclosedChildren =
-    item.role === "ticket" || item.status === "closed"
-      ? []
-      : openChildren(item.id, index);
+    item.issueType === "epic" && item.status !== "closed"
+      ? openChildren(item.id, index)
+      : [];
   const closeHint = blockedNow
     ? "工单仍受阻，无法关闭"
     : unclosedChildren.length
-      ? `还有 ${unclosedChildren.length} 张子工单未关闭`
+      ? `还有 ${unclosedChildren.length} 个子项未关闭`
       : "";
   const setStatus = async (status: string) => {
     if (busy || status === item.status) return;
@@ -735,8 +736,8 @@ export function Detail({
               </button>
               <button
                 className="primary-button"
-                disabled={readOnly || busy || blockedNow || confirm !== null}
-                title={blockedNow ? "工单仍受阻，无法关闭" : ""}
+                disabled={readOnly || busy || !!closeHint || confirm !== null}
+                title={closeHint}
                 onClick={() => setConfirm("accept")}
               >
                 通过并关闭 <Check size={15} />
@@ -765,7 +766,6 @@ export function Detail({
           {snapshot.source === "bd" &&
             !edit &&
             item.status !== "closed" &&
-            item.request?.kind !== "review" &&
             closeHint && <small>{closeHint}</small>}
           {snapshot.source === "bd" &&
             !edit &&

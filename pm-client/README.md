@@ -24,7 +24,7 @@ The app embeds its frontend. It has its own identifier (`com.beads.pm`) and the 
 
 - New tickets use sequential IDs (`id-1`, `id-2`, …), and start as independent Ideas. Edit their title, description, assignee, priority, status, parent, target date or manual plan in detail.
 - Projects lists open projects; closed ones fold under **已结束** with their close date and leave the sidebar. A project's overview shows its status and opens its detail.
-- Detail has a status menu for open records, so changing status does not require edit mode. A project or milestone with open children cannot be closed; the footer says how many remain.
+- Detail has a status menu for open records, so changing status does not require edit mode. An epic with open children cannot be closed (BD refuses it); the footer says how many remain.
 - Board has completion windows and shared scope/search filters. `parked` has its own column, and empty status columns collapse to a strip. Project progress includes historical tickets.
 - Need Me reads `human` requests as **待处理**. Explicit `pm:review`, `pm:decision` and `pm:action` labels distinguish review, decision and action requests. It does not infer acceptance from an assignee or an arbitrary human label.
 - Responses append BD notes and remove the answered request labels. Requesting changes returns a review ticket to `in_progress`; it retains the assignee. Closing and reopening act on the explicitly confirmed ticket. Parent auto-close flows are rejected.
