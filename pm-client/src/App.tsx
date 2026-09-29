@@ -67,6 +67,8 @@ function restore(snapshot: Snapshot): {
         filters: {
           ...emptyFilters,
           ...p.filters,
+          // Need Me always opens on all projects, matching its sidebar count.
+          ...(p.view === "need" ? { project: "all", milestone: "all" } : {}),
           owner: assignees(snapshot.items).includes(p.filters?.owner)
             ? p.filters.owner
             : "all",
@@ -114,8 +116,11 @@ export default function App({
   } = useCompactHeader(`${view}:${filters.project}`, view !== "projects");
   const index = useMemo(() => makeIndex(snapshot.items), [snapshot.items]);
   const projects = snapshot.items.filter((i) => i.role === "project");
+  // Closed projects stay reachable from the Projects page, not the sidebar.
+  const activeProjects = projects.filter((p) => p.status !== "closed");
   const project = index.byId.get(filters.project);
-  const effectiveProject = project?.role === "project" ? project : projects[0];
+  const effectiveProject =
+    project?.role === "project" ? project : (activeProjects[0] ?? projects[0]);
   const requests = snapshot.items.filter(
     (i) => i.request && i.status !== "closed",
   );
@@ -179,7 +184,9 @@ export default function App({
   const goView = (next: View) => {
     if (next === "board") setBoardWindow("3d");
     if ((next === "map" || next === "timeline") && !project)
-      setScope(projects[0]?.id ?? "all");
+      setScope(effectiveProject?.id ?? "all");
+    // The sidebar count covers all projects, so the page starts there too.
+    if (next === "need") setScope("all");
     setView(next);
   };
   const refresh = async () => {
@@ -383,17 +390,17 @@ export default function App({
           ))}
         </nav>
         <div className="sidebar-label project-label">
-          项目 <span>{projects.length}</span>
+          项目 <span>{activeProjects.length}</span>
         </div>
         <div className="sidebar-projects">
-          {projects.map((p) => (
+          {activeProjects.map((p) => (
             <button
               key={p.id}
               className={project?.id === p.id ? "selected" : ""}
               onClick={() => goProject(p.id)}
             >
               <span
-                className={`project-dot ${p.status === "idea" ? "idea" : ""}`}
+                className={`project-dot ${p.status === "idea" ? "idea" : ["deferred", "parked"].includes(p.status) ? "paused" : ""}`}
               />
               <span>{p.title}</span>
             </button>
@@ -608,11 +615,22 @@ export default function App({
                     }}
                   >
                     <option value="all">全部项目</option>
-                    {projects.map((p) => (
+                    {activeProjects.map((p) => (
                       <option value={p.id} key={p.id}>
                         {p.title}
                       </option>
                     ))}
+                    {projects.length > activeProjects.length && (
+                      <optgroup label="已结束">
+                        {projects
+                          .filter((p) => p.status === "closed")
+                          .map((p) => (
+                            <option value={p.id} key={p.id}>
+                              {p.title}
+                            </option>
+                          ))}
+                      </optgroup>
+                    )}
                   </select>
                   <button
                     className={`filter-button ${activeCount ? "filtered" : ""}`}

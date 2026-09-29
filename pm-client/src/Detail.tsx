@@ -19,7 +19,10 @@ import {
   blockers,
   isBlocked,
   dateLabel,
+  openChildren,
+  settableStatuses,
   stageOf,
+  statusLabel,
   requestLabel,
   type Index,
   type RecordItem,
@@ -82,6 +85,28 @@ export function Detail({
   const isDirty = JSON.stringify(draft) !== JSON.stringify(item);
   const blocked = blockers(item, index);
   const blockedNow = isBlocked(item, index);
+  // BD refuses to close an epic while any direct child is open.
+  const unclosedChildren =
+    item.role === "ticket" || item.status === "closed"
+      ? []
+      : openChildren(item.id, index);
+  const closeHint = blockedNow
+    ? "工单仍受阻，无法关闭"
+    : unclosedChildren.length
+      ? `还有 ${unclosedChildren.length} 张子工单未关闭`
+      : "";
+  const setStatus = async (status: string) => {
+    if (busy || status === item.status) return;
+    setBusy(true);
+    try {
+      await onSave({ ...item, status });
+      setError("");
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   const responseDirty =
     (confirm === "changes" ||
       confirm === "respond" ||
@@ -329,21 +354,13 @@ export function Detail({
                         setDraft({ ...draft, status: e.target.value })
                       }
                     >
-                      {[
-                        ...new Set([
-                          draft.status,
-                          "idea",
-                          "open",
-                          "in_progress",
-                          "blocked",
-                          "deferred",
-                          "parked",
-                        ]),
-                      ].map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
+                      {[...new Set([draft.status, ...settableStatuses])].map(
+                        (s) => (
+                          <option key={s} value={s}>
+                            {statusLabel(s)}
+                          </option>
+                        ),
+                      )}
                     </select>
                   </label>
                   <label className="edit-field">
@@ -622,7 +639,7 @@ export function Detail({
                 busy ||
                 ((confirm === "changes" || confirm === "respond") &&
                   !reason.trim()) ||
-                (confirm === "accept" && blockedNow)
+                (confirm === "accept" && !!closeHint)
               }
               onClick={async () => {
                 if (busy) return;
@@ -678,6 +695,23 @@ export function Detail({
         </section>
       )}
       <footer className="detail-actions">
+        {snapshot.source === "bd" && !edit && item.status !== "closed" && (
+          <label className="status-quick">
+            状态
+            <select
+              aria-label="状态"
+              value={item.status}
+              disabled={readOnly || busy || confirm !== null}
+              onChange={(e) => void setStatus(e.target.value)}
+            >
+              {[...new Set([item.status, ...settableStatuses])].map((s) => (
+                <option key={s} value={s}>
+                  {statusLabel(s)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <div>
           {edit ? (
             <button
@@ -730,14 +764,21 @@ export function Detail({
           )}
           {snapshot.source === "bd" &&
             !edit &&
+            item.status !== "closed" &&
+            item.request?.kind !== "review" &&
+            closeHint && <small>{closeHint}</small>}
+          {snapshot.source === "bd" &&
+            !edit &&
             item.request?.kind !== "review" && (
               <button
                 className="quiet-button"
                 disabled={
+                  readOnly ||
                   busy ||
                   confirm !== null ||
-                  (item.status !== "closed" && blockedNow)
+                  (item.status !== "closed" && !!closeHint)
                 }
+                title={item.status !== "closed" ? closeHint : ""}
                 onClick={() =>
                   setConfirm(item.status === "closed" ? "reopen" : "accept")
                 }

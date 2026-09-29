@@ -122,6 +122,20 @@ export function Board({
               stage === "Done"
                 ? done.slice(0, limit)
                 : items.filter((i) => stageOf(i, snapshot, index) === stage);
+            // Empty status columns shrink to a strip so the columns that
+            // hold cards fit on screen; Done keeps its time-window controls.
+            const collapsed = stage !== "Done" && !cards.length;
+            if (collapsed)
+              return (
+                <section
+                  className="board-column collapsed"
+                  key={stage}
+                  aria-label={`${stage} 列，0 项`}
+                >
+                  <StageBadge stage={stage} />
+                  <span className="collapsed-count">0</span>
+                </section>
+              );
             return (
               <section
                 className="board-column"

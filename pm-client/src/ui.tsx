@@ -5,6 +5,7 @@ import {
   CircleDot,
   Clock3,
   Pause,
+  Archive,
   TriangleAlert,
   Eye,
   Lightbulb,
@@ -19,6 +20,7 @@ const statusIcons = {
   Review: Eye,
   Blocked: TriangleAlert,
   "On hold": Pause,
+  Parked: Archive,
   Done: CircleCheck,
   待分类: CircleDashed,
 };

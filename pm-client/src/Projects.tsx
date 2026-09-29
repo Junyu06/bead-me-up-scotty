@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import {
   dateLabel,
+  dateOnly,
+  statusLabel,
   progress,
   stageOf,
   requestLabel,
@@ -33,11 +35,16 @@ export function Projects({
   onOpen: (id: string) => void;
   search: string;
 }) {
-  const projects = snapshot.items.filter(
+  const [showFinished, setShowFinished] = useState(false);
+  const matching = snapshot.items.filter(
     (i) =>
       i.role === "project" &&
       `${i.title} ${i.id}`.toLowerCase().includes(search.toLowerCase()),
   );
+  const projects = matching.filter((i) => i.status !== "closed");
+  const finished = matching
+    .filter((i) => i.status === "closed")
+    .sort((a, b) => (b.closedAt ?? "").localeCompare(a.closedAt ?? ""));
   const requests = snapshot.items.filter(
     (i) => i.request && i.status !== "closed",
   );
@@ -74,7 +81,9 @@ export function Projects({
                 </span>
                 <span>
                   <strong>{project.title}</strong>
-                  {project.status === "idea" && <small>Idea</small>}
+                  {["idea", "deferred", "parked", "blocked"].includes(
+                    project.status,
+                  ) && <small>{statusLabel(project.status)}</small>}
                 </span>
               </span>
               <ProgressLine id={project.id} snapshot={snapshot} index={index} />
@@ -98,9 +107,49 @@ export function Projects({
           );
         })}
         {!projects.length && (
-          <Empty title={search ? "没有匹配的项目" : "暂无项目"} />
+          <Empty
+            title={
+              search
+                ? "没有匹配的进行中项目"
+                : finished.length
+                  ? "没有进行中的项目"
+                  : "暂无项目"
+            }
+          />
         )}
       </div>
+      {finished.length > 0 && (
+        <section className="finished-projects">
+          <button
+            className="finished-toggle"
+            aria-expanded={showFinished}
+            onClick={() => setShowFinished((v) => !v)}
+          >
+            {showFinished ? (
+              <ChevronDown size={15} />
+            ) : (
+              <ChevronRight size={15} />
+            )}
+            已结束 <span>{finished.length}</span>
+          </button>
+          {showFinished &&
+            finished.map((project) => (
+              <button
+                key={project.id}
+                className="finished-row"
+                onClick={() => onProject(project.id)}
+              >
+                <span>{project.title}</span>
+                <span className="subtle">
+                  {project.closedAt
+                    ? `${dateLabel(dateOnly(new Date(project.closedAt)))}关闭`
+                    : "已关闭"}
+                </span>
+                <ArrowUpRight size={15} />
+              </button>
+            ))}
+        </section>
+      )}
       <div className="section-heading next-section">
         <h2>
           待处理事项 <span>{requests.length}</span>
@@ -165,6 +214,17 @@ export function ProjectOverview({
   );
   return (
     <div className="page project-overview">
+      <div className="project-meta">
+        <span>
+          {statusLabel(project.status)}
+          {project.status === "closed" &&
+            project.closedAt &&
+            ` · ${dateLabel(dateOnly(new Date(project.closedAt)))}关闭`}
+        </span>
+        <button className="text-button" onClick={() => onOpen(project.id)}>
+          打开详情 <ArrowUpRight size={14} />
+        </button>
+      </div>
       <p className="project-description">
         {project.description.split("\n")[0]}
       </p>

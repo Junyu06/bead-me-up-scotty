@@ -22,8 +22,10 @@ import {
   localDate,
   makeIndex,
   matches,
+  openChildren,
   progress,
   stageOf,
+  statusLabel,
   timelineOrder,
   type RecordItem,
 } from "../src/domain";
@@ -604,5 +606,49 @@ test("real BD mapping uses native blocking and keeps an unclassified human reque
       ready: [{ id: "missing" }],
       blocked: [],
     }),
+  );
+});
+
+test("parked is a known Board stage and status names match the Board", () => {
+  const base = createFixture();
+  const parked: RecordItem = {
+    id: "p-1",
+    title: "Parked idea",
+    role: "ticket",
+    status: "parked",
+    priority: 2,
+    labels: [],
+    description: "",
+    dependencies: [],
+  };
+  const s = { ...base, items: [...base.items, parked] };
+  assert.equal(stageOf(parked, s, makeIndex(s.items)), "Parked");
+  assert.equal(statusLabel("deferred"), "On hold");
+  assert.equal(statusLabel("parked"), "Parked");
+  assert.equal(statusLabel("in_progress"), "In progress");
+  assert.equal(statusLabel("unknown_status"), "unknown_status");
+});
+
+test("openChildren counts only direct children that are not closed", () => {
+  const row = (id: string, status: string, parent?: string): RecordItem => ({
+    id,
+    title: id,
+    role: parent ? "ticket" : "project",
+    status,
+    parent,
+    priority: 2,
+    labels: [],
+    description: "",
+    dependencies: [],
+  });
+  const index = makeIndex([
+    row("proj", "in_progress"),
+    row("a", "open", "proj"),
+    row("b", "closed", "proj"),
+    row("c", "parked", "a"),
+  ]);
+  assert.deepEqual(
+    openChildren("proj", index).map((i) => i.id),
+    ["a"],
   );
 });

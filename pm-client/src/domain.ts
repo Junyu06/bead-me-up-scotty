@@ -7,6 +7,7 @@ export const stages = [
   "Review",
   "Blocked",
   "On hold",
+  "Parked",
   "Done",
   "待分类",
 ] as const;
@@ -143,13 +144,14 @@ export function stageOf(
 ): Stage {
   if (item.status === "closed") return "Done";
   if (
-    !["idea", "deferred", "open", "in_progress", "blocked"].includes(
+    !["idea", "deferred", "parked", "open", "in_progress", "blocked"].includes(
       item.status,
     )
   )
     return "待分类";
   if (item.status === "idea") return "Idea";
   if (item.status === "deferred") return "On hold";
+  if (item.status === "parked") return "Parked";
   if (item.request?.kind === "review") return "Review";
   if (isBlocked(item, index)) return "Blocked";
   if (item.status === "in_progress") return "In progress";
@@ -160,6 +162,33 @@ export function stageOf(
   )
     return "Ready";
   return "待分类";
+}
+/** Statuses a user may set directly; closing uses its own confirmed action. */
+export const settableStatuses = [
+  "idea",
+  "open",
+  "in_progress",
+  "blocked",
+  "deferred",
+  "parked",
+] as const;
+/** Status names shared with the Board columns. */
+export function statusLabel(status: string): string {
+  return (
+    {
+      idea: "Idea",
+      open: "Open",
+      in_progress: "In progress",
+      blocked: "Blocked",
+      deferred: "On hold",
+      parked: "Parked",
+      closed: "完成",
+    }[status] ?? status
+  );
+}
+/** Direct children still open; BD refuses to close an epic that has any. */
+export function openChildren(id: string, index: Index): RecordItem[] {
+  return (index.children.get(id) ?? []).filter((c) => c.status !== "closed");
 }
 export function progress(id: string, snapshot: Snapshot, index: Index) {
   const tickets = descendants(id, index).filter(
