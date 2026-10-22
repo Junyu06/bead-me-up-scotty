@@ -18,6 +18,7 @@ import { useApp, type DetailAction } from "@/components/app-context";
 import { useImageDrop } from "@/hooks/use-image-drop";
 import { useResizableWidth } from "@/hooks/use-resizable-width";
 import { DescriptionContent } from "@/components/description-content";
+import { noteForViewer } from "@/lib/overview";
 import { MarkdownToolbar, applyTransform } from "@/components/markdown-toolbar";
 import { bold, italic, link } from "@/lib/markdown-edit";
 import { AiAssistPanel } from "@/components/ai-assist-panel";
@@ -196,6 +197,7 @@ function DrawerBody({
     useApp();
   const actor = meta?.humanActor ?? "you";
   const isDemo = meta?.kind === "demo";
+  const viewerNote = noteForViewer(bead, meta?.humanActor ?? "");
 
   const update = useUpdateBead();
   const setStatus = useSetStatus();
@@ -465,9 +467,14 @@ function DrawerBody({
             />
           </>
         ) : (
-          <SheetTitle className="mb-[14px] text-[20px] font-[650] leading-[1.25] tracking-[-.02em] [text-wrap:pretty]">
-            {bead.title}
-          </SheetTitle>
+          <>
+            <SheetTitle className="mb-[14px] text-[20px] font-[650] leading-[1.25] tracking-[-.02em] [text-wrap:pretty]">
+              {bead.title}
+            </SheetTitle>
+            {viewerNote && (
+              <p className="-mt-[6px] mb-[16px] text-[14.5px] leading-[1.6] text-[var(--text-2)]">{viewerNote}</p>
+            )}
+          </>
         )}
 
         <div className="mb-4 grid grid-cols-2 gap-[10px]">

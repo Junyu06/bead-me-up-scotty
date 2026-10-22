@@ -29,7 +29,7 @@ function load(url) {
 }
 
 const { defaultView, isView } = load(new URL("../lib/views.ts", import.meta.url).href);
-const { overviewRows, overviewChildrenMap, overviewProgress, visibleOverviewChildren } = load(
+const { overviewRows, overviewChildrenMap, overviewProgress, visibleOverviewChildren, isOnHold, noteForViewer } = load(
   new URL("../lib/overview.ts", import.meta.url).href,
 );
 
@@ -120,3 +120,37 @@ assert.deepEqual(
   "completed steps keep their authored checklist position instead of sorting by random ID",
 );
 console.log("PASS: numbered checklist order keeps completed steps in place");
+
+const mixed = [
+  bead("idea-1", { status: "idea" }),
+  bead("held-line", { issue_type: "epic", status: "deferred" }),
+  bead("decision", { status: "open" }),
+  bead("open-line", { issue_type: "epic", status: "open" }),
+  bead("busy-line", { issue_type: "epic", status: "in_progress", priority: 3 }),
+  bead("held-task", { status: "deferred" }),
+];
+assert.deepEqual(
+  overviewRows(mixed).map(({ bead: item }) => item.id),
+  ["busy-line", "open-line", "decision", "idea-1", "held-line", "held-task"],
+  "workstreams in progress lead, standalone tasks and ideas follow, on-hold items sink to the end",
+);
+assert.deepEqual(
+  overviewRows(mixed).filter(({ bead: item }) => isOnHold(item)).map(({ bead: item }) => item.id),
+  ["held-line", "held-task"],
+);
+console.log("PASS: Overview puts active workstreams first and on-hold items last");
+
+assert.equal(
+  noteForViewer({ description: "给 Alex：先在描述里\n要做成什么：x", notes: "给 Alex：notes 里的旧句" }, "alex"),
+  "先在描述里",
+  "the description line wins and the viewer name matches case-insensitively",
+);
+assert.equal(
+  noteForViewer({ description: "要做成什么：x", notes: "旧记录\n给 Alex：第一次\n更新\n给 Alex：最新一次" }, "Alex"),
+  "最新一次",
+  "older cards fall back to the most recent line in notes",
+);
+assert.equal(noteForViewer({ description: "For Alex: plain words", notes: "" }, "alex"), "plain words");
+assert.equal(noteForViewer({ description: "给 Sam：别人的", notes: "" }, "alex"), "", "lines for someone else are ignored");
+assert.equal(noteForViewer({ description: "给 Alex：有", notes: "" }, ""), "", "no viewer, no note");
+console.log("PASS: the viewer note is read from description first, then the latest note");

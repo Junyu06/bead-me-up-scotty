@@ -2,63 +2,63 @@
 
 import * as React from "react";
 import { Icon, typeIconName } from "@/components/icons";
-import { OriginBadge, PriorityChip } from "@/components/board/bead-card";
 import { useApp } from "@/components/app-context";
-import { beadOrigin, originTitle } from "@/lib/attribution";
 import type { Bead } from "@/lib/schema";
+import { catColor, statusLabel } from "@/lib/beads-view";
 import {
-  catColor,
-  statusLabel,
-  typeLabel,
-} from "@/lib/beads-view";
-import {
+  isOnHold,
+  noteForViewer,
   overviewChildrenMap,
   overviewProgress,
   overviewRows,
   visibleOverviewChildren,
   type OverviewProgress,
+  type OverviewRow,
 } from "@/lib/overview";
 
-const labelChipClass =
-  "hidden flex-shrink-0 rounded-md border border-border bg-[var(--surface-2)] px-[6px] py-px font-mono text-[10.5px] text-[var(--text-3)] lg:inline";
-
-function LabelChips({ labels, max }: { labels: string[]; max: number }) {
-  const visible = labels.filter((label) => label !== "archived");
-  const shown = visible.slice(0, max);
-  const hidden = visible.slice(max);
-  return (
-    <>
-      {shown.map((label) => (
-        <span key={label} className={labelChipClass}>
-          {label}
-        </span>
-      ))}
-      {hidden.length > 0 && (
-        <span className={labelChipClass} title={hidden.join(", ")}>
-          +{hidden.length}
-        </span>
-      )}
-    </>
-  );
-}
+/** Statuses a top-level row does not need to repeat: they are what the list is. */
+const IMPLIED_TOP_LEVEL_STATUSES = new Set(["open", "in_progress", "deferred"]);
 
 export function OverviewView() {
-  const { beads, humanAllowlist, openCreate, openDetail, readOnly, selectedBeadId, selectBead } = useApp();
+  const { beads, meta, openCreate, openDetail, readOnly, selectedBeadId, selectBead } = useApp();
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
   const [showClosed, setShowClosed] = React.useState(false);
   const [showArchived, setShowArchived] = React.useState(false);
+  const [showOnHold, setShowOnHold] = React.useState(false);
+  const viewer = meta?.humanActor ?? "";
 
   const childrenByParent = React.useMemo(() => overviewChildrenMap(beads), [beads]);
   const rows = React.useMemo(
     () => overviewRows(beads, { showClosed, showArchived }),
     [beads, showArchived, showClosed],
   );
-  const workstreamCount = rows.filter(({ bead }) => bead.issue_type === "epic").length;
-  const independentCount = rows.length - workstreamCount;
+  const activeRows = rows.filter(({ bead }) => !isOnHold(bead));
+  const onHoldRows = rows.filter(({ bead }) => isOnHold(bead));
 
   const toggleExpanded = React.useCallback((id: string) => {
     setExpanded((current) => ({ ...current, [id]: !current[id] }));
   }, []);
+
+  const renderRow = ({ bead, progress }: OverviewRow) => (
+    <OverviewItem
+      key={bead.id}
+      bead={bead}
+      progress={progress}
+      depth={0}
+      path={new Set()}
+      childrenByParent={childrenByParent}
+      expanded={expanded}
+      toggleExpanded={toggleExpanded}
+      showClosed={showClosed}
+      showArchived={showArchived}
+      viewer={viewer}
+      openCreate={openCreate}
+      openDetail={openDetail}
+      readOnly={readOnly}
+      selectedBeadId={selectedBeadId}
+      selectBead={selectBead}
+    />
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -66,7 +66,7 @@ export function OverviewView() {
         <div className="mr-auto flex min-w-0 flex-col gap-px">
           <h1 className="m-0 text-base font-[650] tracking-[-.01em]">Overview</h1>
           <span className="text-[11.5px] text-[var(--text-3)]">
-            {rows.length} top-level {rows.length === 1 ? "item" : "items"} · {workstreamCount} workstreams · {independentCount} independent
+            {activeRows.length} active · {onHoldRows.length} on hold
           </span>
         </div>
         <button
@@ -99,26 +99,24 @@ export function OverviewView() {
 
       <div className="bd-scroll min-h-0 flex-1 overflow-y-auto p-[20px_22px]">
         <div className="mx-auto flex max-w-[980px] flex-col gap-[12px]">
-          {rows.map(({ bead, progress }) => (
-            <OverviewItem
-              key={bead.id}
-              bead={bead}
-              progress={progress}
-              depth={0}
-              path={new Set()}
-              childrenByParent={childrenByParent}
-              expanded={expanded}
-              toggleExpanded={toggleExpanded}
-              showClosed={showClosed}
-              showArchived={showArchived}
-              humanAllowlist={humanAllowlist}
-              openCreate={openCreate}
-              openDetail={openDetail}
-              readOnly={readOnly}
-              selectedBeadId={selectedBeadId}
-              selectBead={selectBead}
-            />
-          ))}
+          {activeRows.map(renderRow)}
+          {onHoldRows.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowOnHold((current) => !current)}
+              aria-expanded={showOnHold}
+              className="flex items-center gap-[8px] rounded-[12px] border border-dashed border-border p-[11px_16px] text-left text-[13px] font-[550] text-[var(--text-2)] hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+            >
+              <span className="flex-1">On hold · {onHoldRows.length}</span>
+              <Icon
+                name="chevron"
+                size={18}
+                className="text-[var(--text-3)] transition-transform"
+                style={{ transform: showOnHold ? "rotate(180deg)" : "rotate(0deg)" }}
+              />
+            </button>
+          )}
+          {showOnHold && onHoldRows.map(renderRow)}
           {rows.length === 0 && (
             <div className="rounded-[14px] border border-dashed border-border p-10 text-center text-[13px] text-[var(--text-3)]">
               No active top-level items. Closed and archived items are hidden by default.
@@ -140,7 +138,7 @@ function OverviewItem({
   toggleExpanded,
   showClosed,
   showArchived,
-  humanAllowlist,
+  viewer,
   openCreate,
   openDetail,
   readOnly,
@@ -156,7 +154,7 @@ function OverviewItem({
   toggleExpanded: (id: string) => void;
   showClosed: boolean;
   showArchived: boolean;
-  humanAllowlist: string[];
+  viewer: string;
   openCreate: (opts?: { parent?: string }) => void;
   openDetail: (id: string) => void;
   readOnly: boolean;
@@ -173,8 +171,8 @@ function OverviewItem({
   const isCyclic = path.has(bead.id);
   const nextPath = new Set(path);
   nextPath.add(bead.id);
-  const origin = beadOrigin(bead, humanAllowlist);
-  const labels = (bead.labels ?? []).filter((label) => label !== "archived");
+  const note = noteForViewer(bead, viewer);
+  const showStatus = depth > 0 || !IMPLIED_TOP_LEVEL_STATUSES.has(bead.status);
 
   return (
     <article
@@ -206,22 +204,19 @@ function OverviewItem({
           <Icon name={bead.issue_type === "epic" ? "target" : typeIconName(bead.issue_type)} size={19} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-[8px] overflow-hidden">
-            <span className="flex-shrink-0 font-mono text-[11.5px] text-[var(--text-3)]">{bead.id}</span>
-            <StatusChip status={bead.status} />
-            <PriorityChip p={bead.priority} />
-            <span className="hidden flex-shrink-0 text-[11px] text-[var(--text-3)] sm:inline">
-              {bead.issue_type === "epic" ? "Workstream" : typeLabel(bead.issue_type)}
-            </span>
-            <LabelChips labels={labels} max={2} />
+          <div className="flex min-w-0 items-center gap-[8px]">
+            <div
+              className={`min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[15px] font-semibold tracking-[-.01em] ${
+                bead.status === "closed" ? "text-[var(--text-3)] line-through decoration-[var(--text-3)]" : ""
+              }`}
+            >
+              {bead.title}
+            </div>
+            {showStatus && <StatusChip status={bead.status} />}
           </div>
-          <div
-            className={`mt-[3px] overflow-hidden text-ellipsis whitespace-nowrap text-[15px] font-semibold tracking-[-.01em] ${
-              bead.status === "closed" ? "text-[var(--text-3)] line-through decoration-[var(--text-3)]" : ""
-            }`}
-          >
-            {bead.title}
-          </div>
+          {note && (
+            <p className="m-0 mt-[4px] line-clamp-2 text-[12.5px] leading-[1.5] text-[var(--text-2)]">{note}</p>
+          )}
         </div>
         {progress.total > 0 && (
           <div className="hidden w-[180px] flex-shrink-0 flex-col items-end gap-[6px] sm:flex">
@@ -242,7 +237,6 @@ function OverviewItem({
             </div>
           </div>
         )}
-        <OriginBadge origin={origin} title={originTitle(bead.created_by, origin)} />
         <button
           type="button"
           onClick={(event) => {
@@ -300,7 +294,7 @@ function OverviewItem({
                 toggleExpanded={toggleExpanded}
                 showClosed={showClosed}
                 showArchived={showArchived}
-                humanAllowlist={humanAllowlist}
+                viewer={viewer}
                 openCreate={openCreate}
                 openDetail={openDetail}
                 readOnly={readOnly}

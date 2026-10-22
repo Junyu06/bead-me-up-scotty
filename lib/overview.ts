@@ -23,13 +23,24 @@ function isArchived(bead: Bead): boolean {
   return (bead.labels ?? []).includes(ARCHIVED_LABEL);
 }
 
+/** On-hold work is parked until something else happens; Overview keeps it out of the way. */
+export function isOnHold(bead: Bead): boolean {
+  return bead.status === "deferred";
+}
+
+/**
+ * Lower ranks come first: workstreams being worked on, other active
+ * workstreams, standalone tasks, ideas, then on-hold and closed items.
+ */
+function displayRank(bead: Bead): number {
+  if (bead.status === "closed") return 6;
+  if (isOnHold(bead)) return 5;
+  if (bead.issue_type === "epic") return bead.status === "in_progress" ? 0 : 1;
+  return bead.status === "idea" ? 3 : 2;
+}
+
 function byDisplayOrder(a: Bead, b: Bead): number {
-  return (
-    Number(a.status === "closed") - Number(b.status === "closed") ||
-    Number(a.issue_type !== "epic") - Number(b.issue_type !== "epic") ||
-    a.priority - b.priority ||
-    a.id.localeCompare(b.id)
-  );
+  return displayRank(a) - displayRank(b) || a.priority - b.priority || a.id.localeCompare(b.id);
 }
 
 /** Keep a checklist in its authored order, including completed steps. */
@@ -112,4 +123,31 @@ export function visibleOverviewChildren(
 ): Bead[] {
   const normalized = { showClosed: false, showArchived: false, ...filters };
   return children.filter((bead) => visible(bead, normalized));
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function addressedLine(text: string | undefined, pattern: RegExp, latest: boolean): string {
+  const lines = (text ?? "").split("\n");
+  if (latest) lines.reverse();
+  for (const line of lines) {
+    const match = line.match(pattern);
+    if (match) return match[1];
+  }
+  return "";
+}
+
+/**
+ * The plain-language line a card carries for the person reading the board,
+ * written as `给 <name>：…` or `For <name>: …`. The description is read first;
+ * cards written before the convention carry it in their notes, where the most
+ * recent line wins. Returns "" when the card has none.
+ */
+export function noteForViewer(bead: Pick<Bead, "description" | "notes">, viewer: string): string {
+  const name = viewer.trim();
+  if (!name) return "";
+  const pattern = new RegExp(`^\\s*(?:给\\s*|For\\s+)${escapeRegExp(name)}\\s*[：:]\\s*(.+?)\\s*$`, "i");
+  return addressedLine(bead.description, pattern, false) || addressedLine(bead.notes, pattern, true);
 }
